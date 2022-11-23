@@ -1,0 +1,15 @@
+[package]
+name = "druid-xml-macro"
+version = "0.1.0"
+license = "MIT"
+description = "derive impls for druid, a Rust UI toolkit."
+repository = "https://github.com/markijohn/druid-xml"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "1.0.39"
+quote = "1.0.7"
+proc-macro2 = "1.0.19"
