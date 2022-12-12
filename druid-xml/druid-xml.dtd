@@ -1,0 +1,14 @@
+<!ENTITY % Boolean "(true|false)">
+
+<!ELEMENT druid (label | button  | radio | image)>
+<!ELEMENT container EMPTY>
+<!ELEMENT flow (flow | container | label | button | radio | image)>
+<!ELEMENT label (#PCDATA)>
+<!ELEMENT button (#PCDATA)>
+<!ATTLIST button 
+	class CDATA #IMPLIED 
+	style CDATA #IMPLIED
+	disabled %Boolean; #IMPLIED
+	>
+<!ELEMENT radio (#PCDATA)>
+<!ELEMENT image (#PCDATA)>

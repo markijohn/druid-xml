@@ -8,7 +8,9 @@ use quick_xml::events::Event;
 pub mod basic_elem;
 
 pub enum DruidXMLError {
-	ChildlessElement,
+	InvalidChild( usize ),
+	ChildlessElement( usize ),
+	InvalidAttribute( usize ),
 	XMLError( usize )
 }
 
@@ -17,7 +19,7 @@ pub trait SourceWriter {
 }
 
 
-pub fn parse_xml(ext_writer:Option<ElementSourceProvider>, xml_src:&str) -> Result<Box<dyn ElementSource>, DruidXMLError> {
+pub fn parse_xml(xml_src:&str) -> Result<Box<dyn ElementSource>, DruidXMLError> {
 	let reader = Reader::from_str(xml_src);
 	let mut buf = Vec::new();
 	// The `Reader` does not implement `Iterator` because it outputs borrowed data (`Cow`s)
@@ -31,8 +33,6 @@ pub fn parse_xml(ext_writer:Option<ElementSourceProvider>, xml_src:&str) -> Resu
 			Ok(Event::Eof) => break,
 
 			Ok(Event::Start(e)) => {
-
-
 				match e.name().as_ref() {
 					b"tag1" => println!("attributes values: {:?}",
 										e.attributes().map(|a| a.unwrap().value)
@@ -42,6 +42,7 @@ pub fn parse_xml(ext_writer:Option<ElementSourceProvider>, xml_src:&str) -> Resu
 				}
 			}
 			Ok(Event::Text(e)) => txt.push(e.unescape().unwrap().into_owned()),
+			Ok(Event::End(e)) => (),
 
 			// There are several other `Event`s we do not consider here
 			_ => (),
@@ -49,4 +50,8 @@ pub fn parse_xml(ext_writer:Option<ElementSourceProvider>, xml_src:&str) -> Resu
 		// if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
 		buf.clear();
 	}
+}
+
+fn build_dyn_widget(xml_src:&str) -> DruidXMLError<Box<dyn Widget>> {
+	todo!()
 }
