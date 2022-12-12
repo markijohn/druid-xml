@@ -19,7 +19,7 @@ pub trait SourceWriter {
 }
 
 
-pub fn parse_xml(xml_src:&str) -> Result<Box<dyn ElementSource>, DruidXMLError> {
+pub fn parse_xml(xml_src:&str) -> Result<String, DruidXMLError> {
 	let reader = Reader::from_str(xml_src);
 	let mut buf = Vec::new();
 	// The `Reader` does not implement `Iterator` because it outputs borrowed data (`Cow`s)
@@ -34,10 +34,10 @@ pub fn parse_xml(xml_src:&str) -> Result<Box<dyn ElementSource>, DruidXMLError> 
 
 			Ok(Event::Start(e)) => {
 				match e.name().as_ref() {
-					b"tag1" => println!("attributes values: {:?}",
+					b"button" => println!("attributes values: {:?}",
 										e.attributes().map(|a| a.unwrap().value)
 										.collect::<Vec<_>>()),
-					b"tag2" => count += 1,
+					b"flex" => count += 1,
 					_ => (),
 				}
 			}
