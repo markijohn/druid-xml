@@ -12,7 +12,7 @@ pub enum Error {
 	ChildlessElement( usize ),
 	UnknownAttribute( usize ),
 	InvalidTopElement( usize ),
-	XMLSyntaxError( usize )
+	XMLSyntaxError( (usize,quick_xml::Error) )
 }
 
 impl Error {
@@ -23,7 +23,7 @@ impl Error {
 			Error::ChildlessElement(s) => Some(*s),
 			Error::UnknownAttribute(s) => Some(*s),
 			Error::InvalidTopElement(s) => Some(*s),
-			Error::XMLSyntaxError(s) => Some(*s),
+			Error::XMLSyntaxError( (s, _) ) => Some(*s),
 		}
 	}
 }
@@ -37,6 +37,9 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 
 	let mut res = String::new();
 
+	let css:Option<&str> = None;
+	let custom_widgets:
+
 	let first_event = reader.read_event();
 	loop {
 		match reader.read_event() {
@@ -44,31 +47,20 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 				let ename = e.name();
 				let tag = ename.as_ref();
 				match tag {
-					b"widget" => {
-						reader.read_to_end()
-					}
-					b"flex" => {
-
-					}
-					b"style" => {
-
-					}
+					b"widget" | b"flex" | b"style" => (),
 					_ => {
 						return Err(Error::InvalidTopElement(reader.buffer_position()))
 					}
 				}
 
-				//expect close tag
-				if let Ok(Event::End(e)) = reader.read_event() {
-					if tag != e.name().as_ref() {
-						return Err(Error::InvalidCloseTag(reader.buffer_position()))
-					}
-				} else {
-					return Err(Error::InvalidCloseTag(reader.buffer_position()))
+				let start_pos = reader.buffer_position();
+				match reader.read_to_end(e.name()) {
+					Ok(span) => println!("Detected style : {}", &xml[ span ]),
+					_ => return Err(Error::InvalidCloseTag(start_pos))
 				}
 			},
 
-			Err(e) => return Err(Error::XMLSyntaxError(reader.buffer_position())),
+			Err(e) => return Err(Error::XMLSyntaxError( (reader.buffer_position(),e) )),
 			// exits the loop when reaching end of file
 			Ok(Event::Eof) => return Ok(res),
 			Ok(Event::Start(e)) => {
@@ -102,7 +94,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 				return Err(Error::InvalidTopElement(reader.buffer_position()))
 			}
 		}
-	}
+}
 	
 }
 

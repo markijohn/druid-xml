@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 quick-xml = "0.26.0"
+simplecss = "0.2.1"
