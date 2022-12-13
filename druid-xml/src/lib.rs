@@ -10,12 +10,48 @@ pub mod basic_elem;
 pub enum DruidXMLError {
 	InvalidChild( usize ),
 	ChildlessElement( usize ),
-	InvalidAttribute( usize ),
-	XMLError( usize )
+	UnknownAttribute( usize ),
+	InvalidStartLine( usize ),
+	XMLSyntaxError( usize )
 }
 
 pub trait SourceWriter {
 	
+}
+
+pub fn parse_xml_start(xml:&str) -> Result<String,DruidXMLError> {
+	let reader = Reader::from_str(xml_src);
+	let mut buf = Vec::new();
+
+	let mut res = String::new();
+
+	if let Ok(Event::Start(e)) = reader.read_event() {
+		loop {
+			match reader.read_event() {
+				Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
+				// exits the loop when reaching end of file
+				Ok(Event::Eof) => break,
+
+				Ok(Event::Start(e)) => {
+					match e.name().as_ref() {
+						b"button" => println!("attributes values: {:?}",
+											e.attributes().map(|a| a.unwrap().value)
+											.collect::<Vec<_>>()),
+						b"flex" => count += 1,
+						_ => (),
+					}
+				}
+				Ok(Event::Text(e)) => txt.push(e.unescape().unwrap().into_owned()),
+				Ok(Event::End(e)) => (),
+			}
+		}
+	} else {
+		Err(DruidXMLError::InvalidStartLine(reader.buffer_position()))
+	}
+}
+
+fn parse_xml_content(reader:&mut Reader) {
+
 }
 
 
