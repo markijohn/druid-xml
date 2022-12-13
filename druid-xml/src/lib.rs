@@ -5,89 +5,150 @@ use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
 use quick_xml::events::Event;
 
-pub mod basic_elem;
-
-pub enum DruidXMLError {
+#[derive(Debug)]
+pub enum Error {
 	InvalidChild( usize ),
+	InvalidCloseTag( usize ),
 	ChildlessElement( usize ),
 	UnknownAttribute( usize ),
-	InvalidStartLine( usize ),
+	InvalidTopElement( usize ),
 	XMLSyntaxError( usize )
+}
+
+impl Error {
+	fn error_at(&self) -> Option<usize> {
+		match self {
+			Error::InvalidChild(s) => Some(*s),
+			Error::InvalidCloseTag(s) => Some(*s),
+			Error::ChildlessElement(s) => Some(*s),
+			Error::UnknownAttribute(s) => Some(*s),
+			Error::InvalidTopElement(s) => Some(*s),
+			Error::XMLSyntaxError(s) => Some(*s),
+		}
+	}
 }
 
 pub trait SourceWriter {
 	
 }
 
-pub fn parse_xml_start(xml:&str) -> Result<String,DruidXMLError> {
-	let reader = Reader::from_str(xml_src);
-	let mut buf = Vec::new();
+pub fn parse_xml(xml:&str) -> Result<String,Error> {
+	let mut reader = Reader::from_str(xml);
 
 	let mut res = String::new();
 
-	if let Ok(Event::Start(e)) = reader.read_event() {
-		loop {
-			match reader.read_event() {
-				Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
-				// exits the loop when reaching end of file
-				Ok(Event::Eof) => break,
+	let first_event = reader.read_event();
+	loop {
+		match reader.read_event() {
+			Ok(Event::Start(e)) => {
+				let ename = e.name();
+				let tag = ename.as_ref();
+				match tag {
+					b"widget" => {
+						reader.read_to_end()
+					}
+					b"flex" => {
 
-				Ok(Event::Start(e)) => {
-					match e.name().as_ref() {
-						b"button" => println!("attributes values: {:?}",
-											e.attributes().map(|a| a.unwrap().value)
-											.collect::<Vec<_>>()),
-						b"flex" => count += 1,
-						_ => (),
+					}
+					b"style" => {
+
+					}
+					_ => {
+						return Err(Error::InvalidTopElement(reader.buffer_position()))
 					}
 				}
-				Ok(Event::Text(e)) => txt.push(e.unescape().unwrap().into_owned()),
-				Ok(Event::End(e)) => (),
-			}
-		}
-	} else {
-		Err(DruidXMLError::InvalidStartLine(reader.buffer_position()))
-	}
-}
 
-fn parse_xml_content(reader:&mut Reader) {
+				//expect close tag
+				if let Ok(Event::End(e)) = reader.read_event() {
+					if tag != e.name().as_ref() {
+						return Err(Error::InvalidCloseTag(reader.buffer_position()))
+					}
+				} else {
+					return Err(Error::InvalidCloseTag(reader.buffer_position()))
+				}
+			},
 
-}
-
-
-pub fn parse_xml(xml_src:&str) -> Result<String, DruidXMLError> {
-	let reader = Reader::from_str(xml_src);
-	let mut buf = Vec::new();
-	// The `Reader` does not implement `Iterator` because it outputs borrowed data (`Cow`s)
-	loop {
-		// NOTE: this is the generic case when we don't know about the input BufRead.
-		// when the input is a &str or a &[u8], we don't actually need to use another
-		// buffer, we could directly call `reader.read_event()`
-		match reader.read_event_into(&mut buf) {
-			Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
+			Err(e) => return Err(Error::XMLSyntaxError(reader.buffer_position())),
 			// exits the loop when reaching end of file
-			Ok(Event::Eof) => break,
-
+			Ok(Event::Eof) => return Ok(res),
 			Ok(Event::Start(e)) => {
 				match e.name().as_ref() {
-					b"button" => println!("attributes values: {:?}",
-										e.attributes().map(|a| a.unwrap().value)
-										.collect::<Vec<_>>()),
-					b"flex" => count += 1,
+					//defined style
+					b"style" => todo!("style todo..."),
+
+					//defined custom widget
+					b"widget" => todo!(),
+
+					//root
+					b"flex" => todo!(),
+
+					//container
+					b"container" => todo!(),
+
 					_ => (),
 				}
 			}
-			Ok(Event::Text(e)) => txt.push(e.unescape().unwrap().into_owned()),
-			Ok(Event::End(e)) => (),
+			// Ok(Event::Comment(_)) => (),
+			// Ok(Event::CData(_)) => (),
+			// Ok(Event::Empty(_)) => (),
+			// Ok(Event::Decl(_)) => (),
+			// Ok(Event::PI(_)) => (),
+			// Ok(Event::DocType(_)) => (),
+			Ok(Event::Text(e)) => (),
+			// Ok(Event::End(e)) => (),
 
-			// There are several other `Event`s we do not consider here
-			_ => (),
+			el @ _ => {
+				println!("{:?}", first_event);
+				return Err(Error::InvalidTopElement(reader.buffer_position()))
+			}
 		}
-		// if we don't keep a borrow elsewhere, we can clear the buffer to keep memory usage low
-		buf.clear();
 	}
+	
 }
 
-fn build_dyn_widget(xml_src:&str) -> DruidXMLError<Box<dyn Widget>> {
+fn parse_child_content<R, W:Write>(reader:&mut Reader<R>, wirter:W) -> Result<bool, Error> {
 	todo!()
+}
+
+
+#[cfg(test)]
+mod test {
+	#[test]
+	fn test() {
+		let result = super::parse_xml(r#"
+		<style>
+		label:hover { color:#333333 }
+		button {color:black, background-color:white}
+		textbox {color:black, background-color:gray}
+		#pwd {color:white, background-color:black}
+		</style>
+
+		<widget name=icon>
+			<flex direction="row">
+				<label style="font-size:25px">${icon_text}</label>
+				<label style="font-size:10px">${title}</label>
+			</flex>
+		</widget>
+
+		<flex direction="row">
+			<label>Login..</label>
+
+			<widget name=native_custom_widget title="GO"/>
+			<widget name=native_custom_widget title="MAIN"/>
+			<widget name=native_custom_widget title="NO"/>
+			<icon title="Exit" icon="★" onclick="exit"/>
+
+			<!-- you can remove direction="col" attribute because that default value is "col" and also other all default value is ignorable -->
+			<flex direction="col" cross_alignment="" main_alignment="" fill_major_axis="true">
+				<label>ID</label><textbox class="normal" lens="id" value="Default Value" placeholder="Input here"/>
+				<label>PWD</label><textbox lens="pwd" placeholder="Your password"/>
+			</flex>
+
+			<flex>
+				<button onclick="login">OK</button>
+				<button style="background-color:red; color:white">CANCEL</button>
+			</flex>
+		</flex>
+		"#).unwrap();
+	}
 }
