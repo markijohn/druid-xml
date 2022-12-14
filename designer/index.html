@@ -6,7 +6,16 @@
 			@import url(style.css);
 		</style>
 		<script src="https://unpkg.com/split.js/dist/split.min.js"></script>
+		<script type="text/javascript" src="https://ajaxorg.github.io/ace-builds/src/ace.js"></script> 
+		<script type="text/javascript" src="https://ajaxorg.github.io/ace-builds/src/ext-language_tools.js"></script> 
+
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ace-colorpicker@0.0.12/addon/ace-colorpicker.css" />
+		<script src="https://cdn.jsdelivr.net/npm/ace-colorpicker@0.0.12/addon/ace-colorpicker.min.js" ></script>
+
+		<script type="module" src="druid-tag.js"></script>
+
 		<script type="text/javascript">
+			var editor;
 			window.onload = () => {
 				var sizes = localStorage.getItem('split-sizes')
 				if (sizes) {
@@ -14,7 +23,7 @@
 				} else {
 					sizes = [50, 50] // default sizes
 				}
-				Split(['#codemirror_xml', '#preview'] , 
+				Split(['#editor', '#preview_background'] , 
 				{
 					sizes: sizes,
 					gutterSize: 10,
@@ -22,16 +31,59 @@
 						localStorage.setItem('split-sizes', JSON.stringify(sizes))
 					}
 				});
+				editor = ace.edit("editor");
+				ace.require("ace/ext/language_tools.js");
+				ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.14.0')
+				editor.setTheme("ace/theme/monokai");
+				//editor.setTheme("ace/theme/solarized_light");
+				editor.getSession().setMode("ace/mode/xml", () => {
+					AceColorPicker.load(ace, editor);
+				});
+				editor.setShowPrintMargin(false);
+				editor.setOptions({
+					enableBasicAutocompletion: true,
+					// enableBasicAutocompletion: [{
+					// 	getCompletions: (editor, session, pos, prefix, callback) => {
+					// 		// note, won't fire if caret is at a word that does not have these letters
+					// 		callback(null, [
+					// 			{value: 'flex', score: 1, meta: 'Flex layout container'},
+					// 			{value: 'button', score: 1, meta: 'Button'},
+					// 			{value: 'textbox', score: 1, meta: 'Input text box'}
+					// 		]);
+					// 	},
+					// }],
+					enableSnippets: true,
+					enableLiveAutocompletion: true
+				});
+				editor.getSession().on('change', function() {
+					let replace_tags = ['flex', 'button', 'textbox', 'label'];
+					let src = editor.getValue();
+					replace_tags.forEach( tag => {
+						src = src.replace("<"+tag, "<druid-"+tag);
+						src = src.replace("</"+tag, "</druid-"+tag);
+					});
+					src = '<'+'script type="module" src="druid-tag.js">'+'<'+'/script'+'>' + src;
+					src = '<'+'style>'+'html,body {width:100%; height:100%}'+'<'+'/style'+'>' + src;
+					let preview = document.querySelector("#preview iframe");
+					preview.srcdoc = src;
+					// let dom = new DOMParser().parseFromString(src, "text/html");
+					// let preview = document.querySelector("#preview");
+					// preview.innerHTML = "";
+					// preview.appendChild( dom );
+				});
 			}
 		</script>
 	</head>
 	<body>
 		<div class="split">
-			<div id="codemirror_xml"></div>
-			<div id="preview"></div>
+			<div id="editor"></div>
+			<div id="preview_background">
+				<div id="preview">
+					<iframe id="preview_iframe"></iframe>
+				</div>
+			</div>
 		</div>
 
-
-
+		
 	</body>
 </html>
