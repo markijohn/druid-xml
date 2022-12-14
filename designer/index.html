@@ -59,8 +59,8 @@
 					let replace_tags = ['flex', 'button', 'textbox', 'label'];
 					let src = editor.getValue();
 					replace_tags.forEach( tag => {
-						src = src.replace("<"+tag, "<druid-"+tag);
-						src = src.replace("</"+tag, "</druid-"+tag);
+						src = src.replaceAll("<"+tag, "<druid-"+tag);
+						src = src.replaceAll("</"+tag, "</druid-"+tag);
 					});
 					src = '<'+'script type="module" src="druid-tag.js">'+'<'+'/script'+'>' + src;
 					src = '<'+'style>'+'html,body {width:100%; height:100%}'+'<'+'/style'+'>' + src;
