@@ -38,9 +38,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 	let mut res = String::new();
 
 	let css:Option<&str> = None;
-	let custom_widgets:
-
-	let first_event = reader.read_event();
+	
 	loop {
 		match reader.read_event() {
 			Ok(Event::Start(e)) => {
@@ -90,7 +88,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 			// Ok(Event::End(e)) => (),
 
 			el @ _ => {
-				println!("{:?}", first_event);
+				println!("{:?}", el);
 				return Err(Error::InvalidTopElement(reader.buffer_position()))
 			}
 		}
