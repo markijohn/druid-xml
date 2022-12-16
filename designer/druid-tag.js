@@ -35,3 +35,22 @@ window.customElements.define('druid-button', class extends HTMLElement {
 		this.appendChild(btn);
 	}
 });
+
+window.onload = () => {
+	let custom_parts = document.querySelectorAll("custom");
+	custom_parts.forEach( cpart => {
+		let html = cpart.innerHTML;
+		let tag = cpart.getAttribute("map");
+		if( tag && tag.trim() != "" ) {
+			let custom_impls = document.querySelectorAll( tag );
+			custom_impls.forEach( ci => {
+				//let kv = ci.getAttributeNames().reduce( (kv,k) => { kv[k] = ci.getAttribute(k); return kv } , {} );
+				let build_html = html.replace(/\$\{([a-z|A-Z|0-9|_]+)?\}/g, function(match, item) {
+					//return kv[item] || ""
+					return ci.getAttribute( item ) || ""
+				} );
+				ci.outerHTML = build_html;
+			});
+		}
+	});
+}

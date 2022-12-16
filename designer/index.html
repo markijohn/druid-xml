@@ -12,8 +12,6 @@
 		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ace-colorpicker@0.0.12/addon/ace-colorpicker.css" />
 		<script src="https://cdn.jsdelivr.net/npm/ace-colorpicker@0.0.12/addon/ace-colorpicker.min.js" ></script>
 
-		<script type="module" src="druid-tag.js"></script>
-
 		<script type="text/javascript">
 			var editor;
 			window.onload = () => {
@@ -56,14 +54,20 @@
 					enableLiveAutocompletion: true
 				});
 				editor.getSession().on('change', function() {
-					let replace_tags = ['flex', 'button', 'textbox', 'label'];
+					// let replace_tags = ['flex', 'button', 'textbox', 'label'];
+					// let src = editor.getValue();
+					// replace_tags.forEach( tag => {
+					// 	src = src.replaceAll("<"+tag, "<druid-"+tag);
+					// 	src = src.replaceAll("</"+tag, "</druid-"+tag);
+					// });
 					let src = editor.getValue();
-					replace_tags.forEach( tag => {
-						src = src.replaceAll("<"+tag, "<druid-"+tag);
-						src = src.replaceAll("</"+tag, "</druid-"+tag);
-					});
-					src = '<'+'script type="module" src="druid-tag.js">'+'<'+'/script'+'>' + src;
-					src = '<'+'style>'+'html,body {width:100%; height:100%}'+'<'+'/style'+'>' + src;
+					src = '<sc'+'ript type="module" src="druid-tag.js"></sc'+'ript>' + src;
+					src = `<style>
+						html,body {width:100%; height:100%; overflow:hidden}
+						flex { display:flex }
+						custom { display:none }
+						</style>`
+					 + src;
 					let preview = document.querySelector("#preview iframe");
 					preview.srcdoc = src;
 					// let dom = new DOMParser().parseFromString(src, "text/html");
@@ -84,6 +88,41 @@
 			</div>
 		</div>
 
+
+<!--
+
+<custom map="myWidget1">
+	<flex>
+		<label>${name}</label>
+		<button>${btn}</button>
+	</flex>
+</custom>
+
+<flex map="main">
+    333333
+	<label>MAIN FRAME<label>
+	<myWidget1 name="label name" btn="button name"></myWidget1>
+	<button>1234</button>
+</flex>
+
+-->
+
+<!--
+
+<custom map="myWidget1">
+	<div class="d-flex">
+		<label>${name}</label>
+		<button>${btn}</button>
+	</flex>
+</custom>
+
+<flex map="main">
+	<label>MAIN FRAME<label>
+	<myWidget1 name="label name" btn="button name"></myWidget>
+	<myNativeWidget name="label name" btn="button name"></myNativeWidget>
+	<button>1234</button>
+</flex>
+-->
 		
 	</body>
 </html>
