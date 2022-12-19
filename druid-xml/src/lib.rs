@@ -4,6 +4,7 @@ use std::io::Write;
 use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
 use quick_xml::events::Event;
+use simplecss::StyleSheet;
 
 #[derive(Debug)]
 pub enum Error {
@@ -12,6 +13,7 @@ pub enum Error {
 	ChildlessElement( usize ),
 	UnknownAttribute( usize ),
 	InvalidTopElement( usize ),
+	CSSSyntaxError( (usize,simplecss::Error) ),
 	XMLSyntaxError( (usize,quick_xml::Error) )
 }
 
@@ -23,13 +25,40 @@ impl Error {
 			Error::ChildlessElement(s) => Some(*s),
 			Error::UnknownAttribute(s) => Some(*s),
 			Error::InvalidTopElement(s) => Some(*s),
+			Error::CSSSyntaxError( (s,_) ) => Some(*s),
 			Error::XMLSyntaxError( (s, _) ) => Some(*s),
 		}
 	}
 }
 
+struct ElementSep<'a> {
+	tag : &'a str,
+	class : Vec<&'a str>,
+	id : Option<&'a str>
+}
+
+struct Element<'a> {
+	parents : Vec<&'a ElementSep<'a>>,
+	style : Vec<&'a simplecss::Rule<'a>>,
+	elem_style_rule : &'a simplecss::Rule<'a>
+}
+
+
 pub trait SourceWriter {
 	
+}
+
+fn write_rust_source<'a, W:std::io::Write>(w:W, parent:Option<&ElementSep<'a>>, parent_attrs:Option<Attributes>, 
+et_attrs:Attributes, style:StyleSheet<'a>, text:&str) -> Result<usize, Error> {
+	// w.write_all(  )
+	// if let Some(w) = parent {
+	// 	w.write()
+	// } else {
+	// 	write!(w, "let parent = ")
+	// 	w.write_all( format!("") );
+	// }
+	// Ok( )
+	todo!()
 }
 
 pub fn parse_xml(xml:&str) -> Result<String,Error> {
@@ -37,7 +66,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 
 	let mut res = String::new();
 
-	let css:Option<&str> = None;
+	let mut styles:Vec<StyleSheet> = vec![];
 	
 	loop {
 		match reader.read_event() {
@@ -53,7 +82,16 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 
 				let start_pos = reader.buffer_position();
 				match reader.read_to_end(e.name()) {
-					Ok(span) => println!("Detected style : {}", &xml[ span ]),
+					Ok(span) => {
+						match tag {
+							b"style" => {
+								styles.push( StyleSheet::parse(&xml[span]) );
+							}
+							_ => {
+
+							}
+						}
+					},
 					_ => return Err(Error::InvalidCloseTag(start_pos))
 				}
 			},
@@ -61,23 +99,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 			Err(e) => return Err(Error::XMLSyntaxError( (reader.buffer_position(),e) )),
 			// exits the loop when reaching end of file
 			Ok(Event::Eof) => return Ok(res),
-			Ok(Event::Start(e)) => {
-				match e.name().as_ref() {
-					//defined style
-					b"style" => todo!("style todo..."),
-
-					//defined custom widget
-					b"widget" => todo!(),
-
-					//root
-					b"flex" => todo!(),
-
-					//container
-					b"container" => todo!(),
-
-					_ => (),
-				}
-			}
+			//Ok(Event::Start(e)) => (),
 			// Ok(Event::Comment(_)) => (),
 			// Ok(Event::CData(_)) => (),
 			// Ok(Event::Empty(_)) => (),
