@@ -1,0 +1,213 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'druid-xml'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "druid-xml",
+                    "kind": "lib"
+                }
+            },
+            "args": ["--nocapture"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'dynamic_skin'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=dynamic_skin",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "dynamic_skin",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'dynamic_skin'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=dynamic_skin",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "dynamic_skin",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'dyn_widget'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=dyn_widget",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "dyn_widget",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'dyn_widget'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=dyn_widget",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "dyn_widget",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'rune'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=rune",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "rune",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'rune'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=rune",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "rune",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'split'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=split",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "split",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'split'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=split",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "split",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'static_widget'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=static_widget",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "static_widget",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'static_widget'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=static_widget",
+                    "--package=druid-xml"
+                ],
+                "filter": {
+                    "name": "static_widget",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

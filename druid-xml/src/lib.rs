@@ -19,15 +19,15 @@ pub enum Error {
 }
 
 impl Error {
-	fn error_at(&self) -> Option<usize> {
+	fn error_at(&self) -> usize {
 		match self {
-			Error::InvalidChild(s) => Some(*s),
-			Error::InvalidCloseTag(s) => Some(*s),
-			Error::ChildlessElement(s) => Some(*s),
-			Error::UnknownAttribute(s) => Some(*s),
-			Error::InvalidTopElement(s) => Some(*s),
-			Error::CSSSyntaxError( (s,_) ) => Some(*s),
-			Error::XMLSyntaxError( (s, _) ) => Some(*s),
+			Error::InvalidChild(s) => *s,
+			Error::InvalidCloseTag(s) => *s,
+			Error::ChildlessElement(s) => *s,
+			Error::UnknownAttribute(s) => *s,
+			Error::InvalidTopElement(s) => *s,
+			Error::CSSSyntaxError( (s,_) ) => *s,
+			Error::XMLSyntaxError( (s, _) ) => *s,
 		}
 	}
 }
@@ -39,23 +39,6 @@ struct Element<'a> {
 	style : StyleSheet<'a>,
 }
 
-struct LayerInfo {
-	naming : String,
-	layer_group : HashMap<&str, &str>,
-	child : usize
-}
-
-fn write_rust_source<'a, W:std::io::Write>(w:W, parent:Option<&Element<'a>>, target:&Element<'a>) -> Result<usize, Error> {
-	// w.write_all(  )
-	// if let Some(w) = parent {
-	// 	w.write()
-	// } else {
-	// 	write!(w, "let parent = ")
-	// 	w.write_all( format!("") );
-	// }
-	// Ok( )
-	todo!()
-}
 
 pub fn parse_xml(xml:&str) -> Result<String,Error> {
 	let mut reader = Reader::from_str( xml );
@@ -113,6 +96,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 }
 
 fn parse_child_content<'a:'b, 'b>(reader:&mut Reader<&'a [u8]>, elem:&'b mut Element, writer:&mut String) -> Result<(), Error> {
+
 	loop {
 		let pos = reader.buffer_position();
 		match reader.read_event() {
@@ -146,11 +130,18 @@ fn parse_child_content<'a:'b, 'b>(reader:&mut Reader<&'a [u8]>, elem:&'b mut Ele
 						}
 						b"button" => {
 							write!(writer, r#"let btn_label = Label::new("{}");"#, String::from_utf8_lossy(&text) ).unwrap();
-							write!(writer, r#"let child{} = Button::from_label(btn_label);"#).unwrap();
+							write!(writer, r#"let child = Button::from_label(btn_label);"#).unwrap();
 						},
 						_ => todo!()
 					}
+					if let Ok(Event::End(e)) = reader.read_event() {
+
+					} else {
+						println!("1{}", unsafe { String::from_utf8_lossy(elem.tag) } );
+						return Err(Error::InvalidCloseTag((pos)))
+					}
 				} else {
+					println!("2{}", unsafe { String::from_utf8_lossy(elem.tag) } );
 					return Err( Error::InvalidCloseTag(pos) )
 				}
 			}
@@ -166,7 +157,7 @@ fn parse_child_content<'a:'b, 'b>(reader:&mut Reader<&'a [u8]>, elem:&'b mut Ele
 mod test {
 	#[test]
 	fn test() {
-		let result = super::parse_xml(r#"
+		let src = r#"
 		<style>
 		label:hover { color:#333333 }
 		button {color:black, background-color:white}
@@ -174,12 +165,12 @@ mod test {
 		#pwd {color:white, background-color:black}
 		</style>
 
-		<widget name=icon>
+		<custom name=icon>
 			<flex direction="row">
 				<label style="font-size:25px">${icon_text}</label>
 				<label style="font-size:10px">${title}</label>
 			</flex>
-		</widget>
+		</custom>
 
 		<flex direction="row">
 			<label>Login..</label>
@@ -200,6 +191,12 @@ mod test {
 				<button style="background-color:red; color:white">CANCEL</button>
 			</flex>
 		</flex>
-		"#).unwrap();
+		"#;
+		let result = super::parse_xml( src );
+		// println!("{:?}", result);
+		match result {
+			Ok(compiled) => println!("{}", compiled),
+			Err(e) => { println!("Error : {}", &src[e.error_at() .. ])}
+		}
 	}
 }
