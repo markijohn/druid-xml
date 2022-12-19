@@ -1,5 +1,6 @@
 
 use std::io::Write;
+use std::fmt::Write as FmtWrite;
 
 use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
@@ -31,25 +32,20 @@ impl Error {
 	}
 }
 
-struct ElementSep<'a> {
-	tag : &'a str,
-	class : Vec<&'a str>,
-	id : Option<&'a str>
-}
-
+#[derive(Debug)]
 struct Element<'a> {
-	parents : Vec<&'a ElementSep<'a>>,
-	style : Vec<&'a simplecss::Rule<'a>>,
-	elem_style_rule : &'a simplecss::Rule<'a>
+	tag : &'a [u8],
+	attrs : Attributes<'a>,
+	style : StyleSheet<'a>,
 }
 
-
-pub trait SourceWriter {
-	
+struct LayerInfo {
+	naming : String,
+	layer_group : HashMap<&str, &str>,
+	child : usize
 }
 
-fn write_rust_source<'a, W:std::io::Write>(w:W, parent:Option<&ElementSep<'a>>, parent_attrs:Option<Attributes>, 
-et_attrs:Attributes, style:StyleSheet<'a>, text:&str) -> Result<usize, Error> {
+fn write_rust_source<'a, W:std::io::Write>(w:W, parent:Option<&Element<'a>>, target:&Element<'a>) -> Result<usize, Error> {
 	// w.write_all(  )
 	// if let Some(w) = parent {
 	// 	w.write()
@@ -62,11 +58,11 @@ et_attrs:Attributes, style:StyleSheet<'a>, text:&str) -> Result<usize, Error> {
 }
 
 pub fn parse_xml(xml:&str) -> Result<String,Error> {
-	let mut reader = Reader::from_str(xml);
+	let mut reader = Reader::from_str( xml );
 
 	let mut res = String::new();
 
-	let mut styles:Vec<StyleSheet> = vec![];
+	let mut style = StyleSheet::new();
 	
 	loop {
 		match reader.read_event() {
@@ -74,39 +70,37 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 				let ename = e.name();
 				let tag = ename.as_ref();
 				match tag {
-					b"widget" | b"flex" | b"style" => (),
+					b"style" => {
+						let start_pos = reader.buffer_position();
+						match reader.read_to_end(e.name()) {
+							Ok(span) => {
+								style.parse_more( &xml[span] );
+							},
+							_ => return Err(Error::InvalidCloseTag(start_pos))
+						}
+					},
 					_ => {
-						return Err(Error::InvalidTopElement(reader.buffer_position()))
+						let mut elem = Element { 
+							tag,
+							attrs: e.attributes(),
+							style: StyleSheet::new(),
+						};
+						parse_child_content(&mut reader, &mut elem, &mut res)?;
 					}
 				}
 
-				let start_pos = reader.buffer_position();
-				match reader.read_to_end(e.name()) {
-					Ok(span) => {
-						match tag {
-							b"style" => {
-								styles.push( StyleSheet::parse(&xml[span]) );
-							}
-							_ => {
-
-							}
-						}
-					},
-					_ => return Err(Error::InvalidCloseTag(start_pos))
-				}
 			},
 
 			Err(e) => return Err(Error::XMLSyntaxError( (reader.buffer_position(),e) )),
 			// exits the loop when reaching end of file
 			Ok(Event::Eof) => return Ok(res),
-			//Ok(Event::Start(e)) => (),
 			// Ok(Event::Comment(_)) => (),
 			// Ok(Event::CData(_)) => (),
 			// Ok(Event::Empty(_)) => (),
 			// Ok(Event::Decl(_)) => (),
 			// Ok(Event::PI(_)) => (),
 			// Ok(Event::DocType(_)) => (),
-			Ok(Event::Text(e)) => (),
+			Ok(Event::Text(e)) => (), //ignore text from root node
 			// Ok(Event::End(e)) => (),
 
 			el @ _ => {
@@ -114,12 +108,57 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 				return Err(Error::InvalidTopElement(reader.buffer_position()))
 			}
 		}
-}
+	}
 	
 }
 
-fn parse_child_content<R, W:Write>(reader:&mut Reader<R>, wirter:W) -> Result<bool, Error> {
-	todo!()
+fn parse_child_content<'a:'b, 'b>(reader:&mut Reader<&'a [u8]>, elem:&'b mut Element, writer:&mut String) -> Result<(), Error> {
+	loop {
+		let pos = reader.buffer_position();
+		match reader.read_event() {
+			Ok(Event::Start(e)) => {
+				let name = e.name();
+				let mut child_elem = Element { 
+					tag : name.as_ref(),
+					attrs: e.attributes(),
+					style: StyleSheet::new(),
+				};
+				parse_child_content(reader, &mut child_elem, writer)?;
+			}
+			Ok(Event::End(e)) => {
+				if e.name().as_ref() == elem.tag {
+					match elem.tag {
+						b"flex"  => {
+							
+						}
+						_ => todo!()
+					}
+				}
+			}
+			Ok(Event::Text(text)) => {
+				// let text:&[u8] = text.as_ref();
+				// elem.text = Some(text);
+				
+				if let Ok(Event::End(e)) = reader.read_event() {
+					match elem.tag {
+						b"label" => {
+							write!(writer, r#"let btn_label = Label::new("{}");"#, String::from_utf8_lossy(&text) ).unwrap();
+						}
+						b"button" => {
+							write!(writer, r#"let btn_label = Label::new("{}");"#, String::from_utf8_lossy(&text) ).unwrap();
+							write!(writer, r#"let child{} = Button::from_label(btn_label);"#).unwrap();
+						},
+						_ => todo!()
+					}
+				} else {
+					return Err( Error::InvalidCloseTag(pos) )
+				}
+			}
+			_ => todo!(),
+			Err(_) => todo!(),
+		}
+	}
+	
 }
 
 
