@@ -11,6 +11,8 @@ use simplecss::StyleSheet;
 pub enum Error {
 	InvalidChild( usize ),
 	InvalidCloseTag( usize ),
+	MustBeTopElement(usize),
+	FnMapRequired(usize),
 	ChildlessElement( usize ),
 	UnknownAttribute( usize ),
 	InvalidTopElement( usize ),
@@ -23,6 +25,8 @@ impl Error {
 		match self {
 			Error::InvalidChild(s) => *s,
 			Error::InvalidCloseTag(s) => *s,
+			Error::MustBeTopElement(s) => *s,
+			Error::FnMapRequired(s) => *s,
 			Error::ChildlessElement(s) => *s,
 			Error::UnknownAttribute(s) => *s,
 			Error::InvalidTopElement(s) => *s,
@@ -68,7 +72,8 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 							attrs: e.attributes(),
 							style: StyleSheet::new(),
 						};
-						parse_child_content(&mut reader, &mut elem, &mut res)?;
+						parse_child_content(0, &mut reader, &mut elem, &mut res)?;
+						res.push_str("}}")
 					}
 				}
 
@@ -95,7 +100,33 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 	
 }
 
-fn parse_child_content<'a:'b, 'b>(reader:&mut Reader<&'a [u8]>, elem:&'b mut Element, writer:&mut String) -> Result<(), Error> {
+fn parse_child_content<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, elem:&'b mut Element, writer:&mut String) -> Result<(), Error> {
+	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
+	let mut child_count = 0;
+
+	macro_rules! writeln {
+		( $($tts:tt)* ) => { {
+			write!(writer, "{}", std::iter::repeat('\t').take(depth).collect::<String>() ).unwrap();
+			write!(writer, $($tts)* ).unwrap();
+			write!(writer, "\n").unwrap();
+		} }
+	}
+
+	match elem.tag {
+		b"flex" => {
+			if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
+				writeln!("let flex = Flex::column()");
+			} else {
+				writeln!("let flex = Flex::row()");
+			}
+		}
+		b"custom" => {
+			if depth != 0 {
+				return Err(Error::MustBeTopElement(reader.buffer_position()))
+			}
+		}
+		_ => ()
+	}
 
 	loop {
 		let pos = reader.buffer_position();
@@ -107,46 +138,50 @@ fn parse_child_content<'a:'b, 'b>(reader:&mut Reader<&'a [u8]>, elem:&'b mut Ele
 					attrs: e.attributes(),
 					style: StyleSheet::new(),
 				};
-				parse_child_content(reader, &mut child_elem, writer)?;
+				child_count += 1;
+				writeln!("let child_{}_{} = {{", depth, child_count);
+				parse_child_content(depth+1, reader, &mut child_elem, writer)?;
+				writeln!("}}");
+
+				//TODO elem attribute check
+				writeln!("flex.with_child(child_{}_{});", depth, child_count);
 			}
 			Ok(Event::End(e)) => {
 				if e.name().as_ref() == elem.tag {
 					match elem.tag {
-						b"flex"  => {
-							
+						b"flex" => {
+							writeln!("flex");
 						}
-						_ => todo!()
-					}
-				}
-			}
-			Ok(Event::Text(text)) => {
-				// let text:&[u8] = text.as_ref();
-				// elem.text = Some(text);
-				
-				if let Ok(Event::End(e)) = reader.read_event() {
-					match elem.tag {
 						b"label" => {
-							write!(writer, r#"let btn_label = Label::new("{}");"#, String::from_utf8_lossy(&text) ).unwrap();
+							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
+							writeln!("let label = Label::new(\"{}\");", name );
+							writeln!("label");
 						}
 						b"button" => {
-							write!(writer, r#"let btn_label = Label::new("{}");"#, String::from_utf8_lossy(&text) ).unwrap();
-							write!(writer, r#"let child = Button::from_label(btn_label);"#).unwrap();
+							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Button") );
+							writeln!("let label_for_button = Label::new(\"{}\");", name );
+							writeln!("let button = Button::from_label(btn_label);");
+							writeln!("button");
 						},
-						_ => todo!()
-					}
-					if let Ok(Event::End(e)) = reader.read_event() {
-
-					} else {
-						println!("1{}", unsafe { String::from_utf8_lossy(elem.tag) } );
-						return Err(Error::InvalidCloseTag((pos)))
-					}
-				} else {
-					println!("2{}", unsafe { String::from_utf8_lossy(elem.tag) } );
-					return Err( Error::InvalidCloseTag(pos) )
+						_ => () //ignore all text like CRLF
+					};
+					return Ok(())
 				}
 			}
-			_ => todo!(),
-			Err(_) => todo!(),
+			Ok(Event::Text(t)) => {
+				// let text:&[u8] = text.as_ref();
+				// elem.text = Some(text);
+				text = Some(t);
+			}
+			Ok(Event::Comment(_)) => (), //ignore
+			Ok(Event::Empty(_)) => (), //ignore
+			Ok(Event::Eof) => {
+				return Err(Error::InvalidCloseTag(pos))
+			},
+			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+			etc@ _ => {
+				todo!( "{:?}",etc )
+			}
 		}
 	}
 	
@@ -165,14 +200,14 @@ mod test {
 		#pwd {color:white, background-color:black}
 		</style>
 
-		<custom name=icon>
+		<custom fn=build_icon>
 			<flex direction="row">
 				<label style="font-size:25px">${icon_text}</label>
 				<label style="font-size:10px">${title}</label>
 			</flex>
 		</custom>
 
-		<flex direction="row">
+		<flex fn=build_main>
 			<label>Login..</label>
 
 			<widget name=native_custom_widget title="GO"/>
@@ -181,7 +216,7 @@ mod test {
 			<icon title="Exit" icon="★" onclick="exit"/>
 
 			<!-- you can remove direction="col" attribute because that default value is "col" and also other all default value is ignorable -->
-			<flex direction="col" cross_alignment="" main_alignment="" fill_major_axis="true">
+			<flex column cross_alignment="" main_alignment="" fill_major_axis="true">
 				<label>ID</label><textbox class="normal" lens="id" value="Default Value" placeholder="Input here"/>
 				<label>PWD</label><textbox lens="pwd" placeholder="Your password"/>
 			</flex>
@@ -193,7 +228,7 @@ mod test {
 		</flex>
 		"#;
 		let result = super::parse_xml( src );
-		// println!("{:?}", result);
+		println!("Result : {:?}", result);
 		match result {
 			Ok(compiled) => println!("{}", compiled),
 			Err(e) => { println!("Error : {}", &src[e.error_at() .. ])}
