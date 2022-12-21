@@ -1,6 +1,7 @@
 
 use std::io::Write;
 use std::fmt::Write as FmtWrite;
+use std::borrow::Cow;
 
 use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
@@ -12,7 +13,7 @@ pub enum Error {
 	InvalidChild( usize ),
 	InvalidCloseTag( usize ),
 	MustBeTopElement(usize),
-	FnMapRequired(usize),
+	AttributeRequired( (usize, &'static str)),
 	ChildlessElement( usize ),
 	UnknownAttribute( usize ),
 	InvalidTopElement( usize ),
@@ -26,7 +27,7 @@ impl Error {
 			Error::InvalidChild(s) => *s,
 			Error::InvalidCloseTag(s) => *s,
 			Error::MustBeTopElement(s) => *s,
-			Error::FnMapRequired(s) => *s,
+			Error::AttributeRequired( (s, _)) => *s,
 			Error::ChildlessElement(s) => *s,
 			Error::UnknownAttribute(s) => *s,
 			Error::InvalidTopElement(s) => *s,
@@ -41,6 +42,27 @@ struct Element<'a> {
 	tag : &'a [u8],
 	attrs : Attributes<'a>,
 	style : StyleSheet<'a>,
+}
+
+trait AttributeGetter {
+	fn get(&self, name:&[u8]) -> Option<Cow<[u8]>>;
+	
+	fn get_result(&self, name:&'static str, pos:usize) -> Result<Cow<[u8]>,Error> {
+		let nameb = name.as_bytes();
+		self.get(nameb)
+		.ok_or( Error::AttributeRequired((pos, name)) )
+	}
+}
+
+impl <'a> AttributeGetter for Attributes<'a> {
+    fn get(&self, name:&[u8]) -> Option<Cow<[u8]>> {
+        self.clone()
+		.find( |e| 
+			e.is_ok() && e.as_ref().unwrap().key.as_ref() == name
+		).map( |e|  {
+			e.unwrap().value
+		})
+    }
 }
 
 
@@ -72,8 +94,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 							attrs: e.attributes(),
 							style: StyleSheet::new(),
 						};
-						parse_child_content(0, &mut reader, &mut elem, &mut res)?;
-						res.push_str("}}")
+						parse_content_recurrsive(0, &mut reader, &mut elem, &style, &mut res)?;
 					}
 				}
 
@@ -100,13 +121,43 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 	
 }
 
-fn parse_child_content<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, elem:&'b mut Element, writer:&mut String) -> Result<(), Error> {
+fn custom_ui<'a, IA, IS>(text:&'a str, attrs:IA, styles:IA)
+where IA:Iterator<Item=(&'a [u8],Cow<'a,[u8]>)>, IS:Iterator<Item=(&'a [u8], IA)> {
+
+}
+
+struct AttributeIter<'a> {
+	attrs : Attributes<'a>
+}
+
+struct StyleIter<'a> {
+	style : StyleSheet<'a>
+}
+
+impl <'a> Iterator for AttributeIter<'a> {
+	type Item = (&'a [u8], Cow<'a,[u8]>);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		while let Some(e) = self.attrs.next() {
+			if let Ok(attr) = e {
+				return Some( (
+					attr.key.into_inner()
+					, attr.value
+				) )
+			}
+		}
+		None
+    }
+}
+
+fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, elem:&'b mut Element, style:&StyleSheet, writer:&mut String) -> Result<(), Error> {
+	//custom_ui();
 	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
 	let mut child_count = 0;
 
 	macro_rules! writeln {
 		( $($tts:tt)* ) => { {
-			write!(writer, "{}", std::iter::repeat('\t').take(depth).collect::<String>() ).unwrap();
+			write!(writer, "{}", std::iter::repeat('\t').take(depth+1).collect::<String>() ).unwrap();
 			write!(writer, $($tts)* ).unwrap();
 			write!(writer, "\n").unwrap();
 		} }
@@ -114,6 +165,11 @@ fn parse_child_content<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, ele
 
 	match elem.tag {
 		b"flex" => {
+			if depth == 0 {
+				let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
+				write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
+			}
+
 			if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
 				writeln!("let flex = Flex::column()");
 			} else {
@@ -124,6 +180,8 @@ fn parse_child_content<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, ele
 			if depth != 0 {
 				return Err(Error::MustBeTopElement(reader.buffer_position()))
 			}
+			let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
+			write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
 		}
 		_ => ()
 	}
@@ -140,17 +198,30 @@ fn parse_child_content<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, ele
 				};
 				child_count += 1;
 				writeln!("let child_{}_{} = {{", depth, child_count);
-				parse_child_content(depth+1, reader, &mut child_elem, writer)?;
+				parse_content_recurrsive(depth+1, reader, &mut child_elem, &style, writer)?;
 				writeln!("}}");
 
-				//TODO elem attribute check
-				writeln!("flex.with_child(child_{}_{});", depth, child_count);
+				if elem.tag == b"flex" {
+					//TODO elem attribute check
+					writeln!("flex.with_child(child_{}_{});", depth, child_count);
+				}
 			}
 			Ok(Event::End(e)) => {
 				if e.name().as_ref() == elem.tag {
 					match elem.tag {
 						b"flex" => {
 							writeln!("flex");
+							if depth == 0 {
+								write!(writer,"}}\n").unwrap();
+							}
+						}
+						b"custom" => {
+							if depth == 0 {
+								writeln!("child_{}_{}", depth, child_count);
+								write!(writer,"}}\n").unwrap();
+							} else {
+								unreachable!()
+							}
 						}
 						b"label" => {
 							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
@@ -165,8 +236,12 @@ fn parse_child_content<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, ele
 						},
 						_ => () //ignore all text like CRLF
 					};
-					return Ok(())
 				}
+
+				//TODO : make EnvSetup
+				//TODO : bind events
+
+				break
 			}
 			Ok(Event::Text(t)) => {
 				// let text:&[u8] = text.as_ref();
@@ -185,6 +260,7 @@ fn parse_child_content<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, ele
 		}
 	}
 	
+	Ok( () )
 }
 
 
@@ -200,14 +276,14 @@ mod test {
 		#pwd {color:white, background-color:black}
 		</style>
 
-		<custom fn=build_icon>
+		<custom fn="build_icon">
 			<flex direction="row">
 				<label style="font-size:25px">${icon_text}</label>
 				<label style="font-size:10px">${title}</label>
 			</flex>
 		</custom>
 
-		<flex fn=build_main>
+		<flex fn="build_main">
 			<label>Login..</label>
 
 			<widget name=native_custom_widget title="GO"/>
@@ -216,7 +292,7 @@ mod test {
 			<icon title="Exit" icon="★" onclick="exit"/>
 
 			<!-- you can remove direction="col" attribute because that default value is "col" and also other all default value is ignorable -->
-			<flex column cross_alignment="" main_alignment="" fill_major_axis="true">
+			<flex cross_alignment="" main_alignment="" fill_major_axis="true">
 				<label>ID</label><textbox class="normal" lens="id" value="Default Value" placeholder="Input here"/>
 				<label>PWD</label><textbox lens="pwd" placeholder="Your password"/>
 			</flex>
