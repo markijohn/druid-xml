@@ -37,11 +37,34 @@ impl Error {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 struct Element<'a> {
+	parent : std::rc::Rc<Element<'a>>,
 	tag : &'a [u8],
 	attrs : Attributes<'a>,
-	style : StyleSheet<'a>,
+	style : Option<StyleSheet<'a>>,
+}
+
+impl <'a> simplecss::Element for Element<'a> {
+    fn parent_element(&self) -> Option<Self> {
+        todo!()
+    }
+
+    fn prev_sibling_element(&self) -> Option<Self> {
+        todo!()
+    }
+
+    fn has_local_name(&self, name: &str) -> bool {
+        todo!()
+    }
+
+    fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
+        todo!()
+    }
+
+    fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
+        todo!()
+    }
 }
 
 trait AttributeGetter {
@@ -92,7 +115,7 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 						let mut elem = Element { 
 							tag,
 							attrs: e.attributes(),
-							style: StyleSheet::new(),
+							style: None,
 						};
 						parse_content_recurrsive(0, &mut reader, &mut elem, &style, &mut res)?;
 					}
@@ -309,5 +332,31 @@ mod test {
 			Ok(compiled) => println!("{}", compiled),
 			Err(e) => { println!("Error : {}", &src[e.error_at() .. ])}
 		}
+	}
+
+	#[test]
+	fn stylesheet() {
+		//css order
+		//1. !important
+		//2. explicit define in html style tag attribute
+		//3. #id
+		//4. .class , abstract class(link,visited,hover,active,focus,first,last,first-child,last-child,nth-child())
+		//5. tag name
+		//6. inherite attribute
+		let mut css = simplecss::StyleSheet::new();
+		let css1 = "
+		body {background-color:blue; margin:2px}
+		flex {padding:2px;}
+		";
+
+		let css2 = "
+		body {background-color:yellow}
+		flex .inside .myflex {padding:5px}
+		";
+		css.parse_more(css1);
+		println!("one : {:#?}", css);
+
+		css.parse_more(css2);
+		println!("\n\ntwo : {:#?}", css);
 	}
 }
