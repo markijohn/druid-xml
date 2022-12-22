@@ -42,13 +42,33 @@ impl Error {
 
 #[derive(Debug,Clone)]
 struct Element<'a> {
-	parent : Option<&'a Element<'a>>,
+	parent : Option<*const Element<'a>>,
+	prev_sib : Option<*const Element<'a>>,
+	src_pos : usize,
 	bs : BytesStart<'a>,
 	text : Option<quick_xml::events::BytesText<'a>>,
 	childs : Vec<Element<'a>>
 }
 
+
 impl <'a> Element<'a> {
+	pub fn tag(&'a self) -> QName<'a> {
+		self.bs.name()
+	}
+
+	pub fn attributes(&'a self) -> Attributes<'a> {
+		self.bs.attributes()
+	}
+
+	pub fn bind_for_query(&mut self) {
+		for (idx,elem) in self.childs.iter_mut().enumerate() {
+			elem.parent = Some(self as *const _);
+			if idx > 0 {
+				elem.prev_sib = Some(&self.childs[idx-1] as _);
+			}
+		}
+	}
+
 	pub fn write(&self, output:&mut String, style:&StyleSheet) {
 		//TODO
 
@@ -64,9 +84,16 @@ impl <'a> Element<'a> {
 	}
 }
 
-// impl <'a,'b> simplecss::Element for Element<'a,'b> {
+
+// struct ElementWrap<'a> {
+// 	parent : Option<&'a ElementWrap<'a>>,
+// 	prev_sib : Option<&'a ElementWrap<'a>>,
+// 	elem : &'a Element<'a>
+// }
+
+// impl <'a> simplecss::Element for &ElementWrap<'a> {
 //     fn parent_element(&self) -> Option<Self> {
-//         self.parent.as_ref().map( |e| e.as_ref().clone() )
+//         self.parent.clone()
 //     }
 
 //     fn prev_sibling_element(&self) -> Option<Self> {
@@ -80,9 +107,9 @@ impl <'a> Element<'a> {
 //     }
 
 //     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-// 		if let Some(v) = self.attrs.get(local_name.as_bytes()) {
-// 			return operator.matches( &String::from_utf8_lossy(&v) )
-// 		}
+// 		// if let Some(v) = self.attrs.get(local_name.as_bytes()) {
+// 		// 	return operator.matches( &String::from_utf8_lossy(&v) )
+// 		// }
 
 // 		false
 //     }
@@ -118,14 +145,11 @@ impl <'a> AttributeGetter for Attributes<'a> {
 
 
 pub fn compile(xml:&str) -> Result<String,Error> {
-	
-
 	let mut res = String::new();
-
 	let (elements,style) = parse_doc(xml)?;
 	println!("{:#?}", elements);
-
 	Ok( res )
+
 	// loop {
 	// 	match reader.read_event() {
 	// 		Ok(Event::Start(e)) => {
@@ -204,6 +228,46 @@ impl <'a> Iterator for AttributeIter<'a> {
     }
 }
 
+fn parse_recurrsive<'a>(elem:&mut Element<'a>,reader:&mut Reader<&'a [u8]>) -> Result< (), Error> {
+	loop {
+		let pos = reader.buffer_position();
+		match reader.read_event() {
+			Ok(Event::Start(e)) => {
+				let mut child_elem = Element {
+					parent : None,
+					prev_sib : None,
+					src_pos : pos,
+					bs : e,
+					text : None,
+					childs : vec![]
+				};
+				parse_recurrsive(&mut child_elem, reader)?;				
+				elem.childs.push(child_elem);
+			}
+			Ok(Event::End(e)) => {
+				if e.name() != elem.tag() {
+					return Err(Error::InvalidCloseTag(pos))
+				}
+				break
+			}
+			Ok(Event::Text(t)) => {
+				elem.text = Some(t);
+			}
+			Ok(Event::Comment(_)) => (), //ignore
+			Ok(Event::Empty(_)) => (), //ignore
+			Ok(Event::Eof) => {
+				return Err(Error::InvalidCloseTag(pos))
+			},
+			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+			etc@ _ => {
+				todo!( "{:?}",etc )
+			}
+		}
+	}
+	
+	Ok( () )
+}
+
 fn parse_doc<'a>(xmlsrc:&'a str) 
 -> Result< (Vec<Element<'a>>,StyleSheet<'a>), Error> {
 	let mut reader = Reader::from_str( xmlsrc );
@@ -221,29 +285,11 @@ fn parse_doc<'a>(xmlsrc:&'a str)
 
 	let mut root_elems:Vec<Element<'a>> = vec![];
 
-	#[derive(Debug)]
-	struct Pair<'a> {
-		bs : BytesStart<'a>,
-		pos : usize,
-		text : Option<quick_xml::events::BytesText<'a>>,
-		childs : Vec<Pair<'a>>
-	}
-
-	impl <'a> Pair<'a> {
-		fn to_element(self, parent:Option<&'a Element<'a>>) -> Element<'a> {
-			Element {
-				parent : parent,
-				bs : self.bs,
-				text : self.text,
-				childs : self.childs.into_iter().map( |e| e.to_element(parent) ).collect()
-			}
-		}
-	}
-
 	'rootElem : loop {
-		let mut stack:Vec<Pair<'a>> = vec![];
+		//let mut stack:Vec<Pair<'a>> = vec![];
+		let mut stack:Vec<Element<'a>> = vec![];
 	
-		'insideElem : loop {
+		let next_root_elem = 'insideElem : loop {
 			let pos = reader.buffer_position();
 			match reader.read_event() {
 				Ok(Event::Start(e)) => {
@@ -255,13 +301,14 @@ fn parse_doc<'a>(xmlsrc:&'a str)
 							},
 							_ => return Err(Error::InvalidCloseTag(start_pos))
 						}
-						break;
+						break None;
 					}
-					stack.push( Pair { pos, bs:e, text:None, childs : vec![] } );
+					//stack.push( Pair { pos, bs:e, text:None, childs : vec![] } );
+					stack.push( Element { parent:None, prev_sib:None, src_pos:pos, bs: e, text: None, childs: vec![] } );
 					text = None;
 				}
 				Ok(Event::End(e)) => {
-					if matches!(stack.last(), Some( Pair { pos, bs, text, childs } ) if bs.name().as_ref() == e.name().as_ref() ) {
+					if matches!(stack.last(), Some( Element { parent, prev_sib, src_pos, bs, text, childs } ) if bs.name().as_ref() == e.name().as_ref() ) {
 						//find end block
 						let mut last = stack.pop().unwrap();
 						last.text = text.take();
@@ -270,10 +317,7 @@ fn parse_doc<'a>(xmlsrc:&'a str)
 							parent.childs.push( last );
 						} else {
 							if stack.len() == 0 {
-								//end of root elem
-								last.to_element(None);
-	
-								break 'insideElem
+								break 'insideElem Some(last);
 							}
 						}
 					} else {
@@ -298,8 +342,15 @@ fn parse_doc<'a>(xmlsrc:&'a str)
 					todo!( "{:?}",etc )
 				}
 			}
+		};
+
+		if let Some(elem) = next_root_elem {
+			root_elems.push( elem );
 		}
-	
+	}
+
+	for root_elem in root_elems.iter_mut() {
+		root_elem.bind_for_query();
 	}
 
 	Ok( (root_elems,style) )
