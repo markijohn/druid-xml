@@ -7,7 +7,8 @@ use std::borrow::Cow;
 
 use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
-use quick_xml::events::Event;
+use quick_xml::events::{Event, BytesStart};
+use quick_xml::name::QName;
 use simplecss::StyleSheet;
 
 #[derive(Debug)]
@@ -41,32 +42,58 @@ impl Error {
 
 #[derive(Debug,Clone)]
 struct Element<'a> {
-	parent : Option<std::rc::Rc<Element<'a>>>,
-	tag : &'a [u8],
-	attrs : Attributes<'a>
+	parent : Option<&'a Element<'a>>,
+	bs : BytesStart<'a>,
+	text : Option<quick_xml::events::BytesText<'a>>,
+	childs : Vec<Element<'a>>
 }
 
-impl <'a> simplecss::Element for Element<'a> {
-    fn parent_element(&self) -> Option<Self> {
-        todo!()
-    }
+impl <'a> Element<'a> {
+	pub fn write(&self, output:&mut String, style:&StyleSheet) {
+		//TODO
 
-    fn prev_sibling_element(&self) -> Option<Self> {
-        todo!()
-    }
+		//Specific style
+		// let local_style = if let Some(lstyle) = self.attrs.get(b"style") {
+		// 	StyleSheet::parse( &String::from_utf8_lossy(&lstyle) )
+		// } else {
+		// 	StyleSheet::new()
+		// };
 
-    fn has_local_name(&self, name: &str) -> bool {
-        todo!()
-    }
 
-    fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-        todo!()
-    }
-
-    fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
-        todo!()
-    }
+		todo!()
+	}
 }
+
+// impl <'a,'b> simplecss::Element for Element<'a,'b> {
+//     fn parent_element(&self) -> Option<Self> {
+//         self.parent.as_ref().map( |e| e.as_ref().clone() )
+//     }
+
+//     fn prev_sibling_element(&self) -> Option<Self> {
+//         //self.prev.as_ref().map( |e| e.as_ref().clone() )
+// 		todo!()
+//     }
+
+//     fn has_local_name(&self, name: &str) -> bool {
+//         //TODO : like <tag:localName ..>
+// 		false
+//     }
+
+//     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
+// 		if let Some(v) = self.attrs.get(local_name.as_bytes()) {
+// 			return operator.matches( &String::from_utf8_lossy(&v) )
+// 		}
+
+// 		false
+//     }
+
+//     fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
+//         //TODO : 
+// 		//https://docs.rs/simplecss/latest/simplecss/enum.PseudoClass.html
+// 		//https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes
+// 		false
+//     }
+// }
 
 trait AttributeGetter {
 	fn get(&self, name:&[u8]) -> Option<Cow<[u8]>>;
@@ -90,58 +117,61 @@ impl <'a> AttributeGetter for Attributes<'a> {
 }
 
 
-pub fn parse_xml(xml:&str) -> Result<String,Error> {
-	let mut reader = Reader::from_str( xml );
+pub fn compile(xml:&str) -> Result<String,Error> {
+	
 
 	let mut res = String::new();
 
-	let mut style = StyleSheet::new();
-	
-	loop {
-		match reader.read_event() {
-			Ok(Event::Start(e)) => {
-				let ename = e.name();
-				let tag = ename.as_ref();
-				match tag {
-					b"style" => {
-						let start_pos = reader.buffer_position();
-						match reader.read_to_end(e.name()) {
-							Ok(span) => {
-								style.parse_more( &xml[span] );
-							},
-							_ => return Err(Error::InvalidCloseTag(start_pos))
-						}
-					},
-					_ => {
-						let mut elem = Element { 
-							parent : None,
-							tag,
-							attrs: e.attributes(),
-						};
-						parse_content_recurrsive(0, &mut reader, Rc::new(elem), &style, &mut res)?;
-					}
-				}
+	let (elements,style) = parse_doc(xml)?;
+	println!("{:#?}", elements);
 
-			},
+	Ok( res )
+	// loop {
+	// 	match reader.read_event() {
+	// 		Ok(Event::Start(e)) => {
+	// 			let ename = e.name();
+	// 			let tag = ename.as_ref();
+	// 			match tag {
+	// 				b"style" => {
+	// 					let start_pos = reader.buffer_position();
+	// 					match reader.read_to_end(e.name()) {
+	// 						Ok(span) => {
+	// 							style.parse_more( &xml[span] );
+	// 						},
+	// 						_ => return Err(Error::InvalidCloseTag(start_pos))
+	// 					}
+	// 				},
+	// 				_ => {
+	// 					let mut elem = Element { 
+	// 						parent : None,
+	// 						tag : e.name(),
+	// 						attrs: e.attributes(),
+	// 						childs : vec![]
+	// 					};
+	// 					parse_content_recurrsive(0, &mut reader, &mut elem, &style, &mut res)?;
+	// 				}
+	// 			}
 
-			Err(e) => return Err(Error::XMLSyntaxError( (reader.buffer_position(),e) )),
-			// exits the loop when reaching end of file
-			Ok(Event::Eof) => return Ok(res),
-			// Ok(Event::Comment(_)) => (),
-			// Ok(Event::CData(_)) => (),
-			// Ok(Event::Empty(_)) => (),
-			// Ok(Event::Decl(_)) => (),
-			// Ok(Event::PI(_)) => (),
-			// Ok(Event::DocType(_)) => (),
-			Ok(Event::Text(e)) => (), //ignore text from root node
-			// Ok(Event::End(e)) => (),
+	// 		},
 
-			el @ _ => {
-				println!("{:?}", el);
-				return Err(Error::InvalidTopElement(reader.buffer_position()))
-			}
-		}
-	}
+	// 		Err(e) => return Err(Error::XMLSyntaxError( (reader.buffer_position(),e) )),
+	// 		// exits the loop when reaching end of file
+	// 		Ok(Event::Eof) => return Ok(res),
+	// 		// Ok(Event::Comment(_)) => (),
+	// 		// Ok(Event::CData(_)) => (),
+	// 		// Ok(Event::Empty(_)) => (),
+	// 		// Ok(Event::Decl(_)) => (),
+	// 		// Ok(Event::PI(_)) => (),
+	// 		// Ok(Event::DocType(_)) => (),
+	// 		Ok(Event::Text(e)) => (), //ignore text from root node
+	// 		// Ok(Event::End(e)) => (),
+
+	// 		el @ _ => {
+	// 			println!("{:?}", el);
+	// 			return Err(Error::InvalidTopElement(reader.buffer_position()))
+	// 		}
+	// 	}
+	// }
 	
 }
 
@@ -174,8 +204,10 @@ impl <'a> Iterator for AttributeIter<'a> {
     }
 }
 
-fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, elem:Rc<Element>, style:&StyleSheet, writer:&mut String) -> Result<(), Error> {
-	//custom_ui();
+fn parse_doc<'a>(xmlsrc:&'a str) 
+-> Result< (Vec<Element<'a>>,StyleSheet<'a>), Error> {
+	let mut reader = Reader::from_str( xmlsrc );
+	let mut style = StyleSheet::new();
 	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
 	let mut child_count = 0;
 
@@ -187,106 +219,245 @@ fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>
 		} }
 	}
 
-	match elem.tag {
-		b"flex" => {
-			if depth == 0 {
-				let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
-				write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
-			}
+	let mut root_elems:Vec<Element<'a>> = vec![];
 
-			//if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
-			if let Some( Cow::Borrowed(b"column") ) = elem.attrs.get(b"direction") {
-				writeln!("let flex = Flex::column()");
-			} else {
-				writeln!("let flex = Flex::row()");
-			}
-		}
-		b"custom" => {
-			if depth != 0 {
-				return Err(Error::MustBeTopElement(reader.buffer_position()))
-			}
-			let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
-			write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
-		}
-		_ => ()
+	#[derive(Debug)]
+	struct Pair<'a> {
+		bs : BytesStart<'a>,
+		pos : usize,
+		text : Option<quick_xml::events::BytesText<'a>>,
+		childs : Vec<Pair<'a>>
 	}
 
-	loop {
-		let pos = reader.buffer_position();
-		match reader.read_event() {
-			Ok(Event::Start(e)) => {
-				let name = e.name();
-				let mut child_elem = Element { 
-					parent : Some( elem.clone() ),
-					tag : name.as_ref(),
-					attrs: e.attributes()
-				};
-				child_count += 1;
-				writeln!("let child_{}_{} = {{", depth, child_count);
-				parse_content_recurrsive(depth+1, reader, Rc::new(child_elem), &style, writer)?;
-				writeln!("}}");
-
-				if elem.tag == b"flex" {
-					//TODO elem attribute check
-					writeln!("flex.with_child(child_{}_{});", depth, child_count);
-				}
-			}
-			Ok(Event::End(e)) => {
-				if e.name().as_ref() == elem.tag {
-					match elem.tag {
-						b"flex" => {
-							writeln!("flex");
-							if depth == 0 {
-								write!(writer,"}}\n").unwrap();
-							}
-						}
-						b"custom" => {
-							if depth == 0 {
-								writeln!("child_{}_{}", depth, child_count);
-								write!(writer,"}}\n").unwrap();
-							} else {
-								unreachable!()
-							}
-						}
-						b"label" => {
-							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
-							writeln!("let label = Label::new(\"{}\");", name );
-							writeln!("label");
-						}
-						b"button" => {
-							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Button") );
-							writeln!("let label_for_button = Label::new(\"{}\");", name );
-							writeln!("let button = Button::from_label(btn_label);");
-							writeln!("button");
-						},
-						_ => () //ignore all text like CRLF
-					};
-				}
-
-				//TODO : make EnvSetup
-				//TODO : bind events
-
-				break
-			}
-			Ok(Event::Text(t)) => {
-				// let text:&[u8] = text.as_ref();
-				// elem.text = Some(text);
-				text = Some(t);
-			}
-			Ok(Event::Comment(_)) => (), //ignore
-			Ok(Event::Empty(_)) => (), //ignore
-			Ok(Event::Eof) => {
-				return Err(Error::InvalidCloseTag(pos))
-			},
-			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
-			etc@ _ => {
-				todo!( "{:?}",etc )
+	impl <'a> Pair<'a> {
+		fn to_element(self, parent:Option<&'a Element<'a>>) -> Element<'a> {
+			Element {
+				parent : parent,
+				bs : self.bs,
+				text : self.text,
+				childs : self.childs.into_iter().map( |e| e.to_element(parent) ).collect()
 			}
 		}
 	}
+
+	'rootElem : loop {
+		let mut stack:Vec<Pair<'a>> = vec![];
 	
-	Ok( () )
+		'insideElem : loop {
+			let pos = reader.buffer_position();
+			match reader.read_event() {
+				Ok(Event::Start(e)) => {
+					if e.name().as_ref() == b"style" {
+						let start_pos = reader.buffer_position();
+						match reader.read_to_end(e.name()) {
+							Ok(span) => {
+								style.parse_more( &xmlsrc[span] );
+							},
+							_ => return Err(Error::InvalidCloseTag(start_pos))
+						}
+						break;
+					}
+					stack.push( Pair { pos, bs:e, text:None, childs : vec![] } );
+					text = None;
+				}
+				Ok(Event::End(e)) => {
+					if matches!(stack.last(), Some( Pair { pos, bs, text, childs } ) if bs.name().as_ref() == e.name().as_ref() ) {
+						//find end block
+						let mut last = stack.pop().unwrap();
+						last.text = text.take();
+
+						if let Some(parent) = stack.last_mut() {
+							parent.childs.push( last );
+						} else {
+							if stack.len() == 0 {
+								//end of root elem
+								last.to_element(None);
+	
+								break 'insideElem
+							}
+						}
+					} else {
+						println!("????? : {:?} {:?}", e.name(), stack.last() );
+						return Err(Error::InvalidCloseTag(pos));
+					}
+				},
+				// Ok(Event::Comment(_)) => (),
+				// Ok(Event::CData(_)) => (),
+				// Ok(Event::Empty(_)) => (),
+				// Ok(Event::Decl(_)) => (),
+				// Ok(Event::PI(_)) => (),
+				// Ok(Event::DocType(_)) => (),
+				Ok(Event::Text(t)) => text = Some(t), //ignore
+				Ok(Event::Comment(_)) => (), //ignore
+				Ok(Event::Empty(_)) => (), //ignore
+				Ok(Event::Eof) => {
+					break 'rootElem
+				},
+				Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+				etc@ _ => {
+					todo!( "{:?}",etc )
+				}
+			}
+		}
+	
+	}
+
+	Ok( (root_elems,style) )
 }
+
+
+
+// fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, writer:&mut String) -> Result<(), Error> {
+// 	//custom_ui();
+// 	//let mut prev:Option<Rc<Element<'b>>> = None;
+// 	let mut style = StyleSheet::new();
+// 	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
+// 	let mut child_count = 0;
+
+// 	macro_rules! writeln {
+// 		( $($tts:tt)* ) => { {
+// 			write!(writer, "{}", std::iter::repeat('\t').take(depth+1).collect::<String>() ).unwrap();
+// 			write!(writer, $($tts)* ).unwrap();
+// 			write!(writer, "\n").unwrap();
+// 		} }
+// 	}
+
+// 	//find start element
+// 	let elem = loop {
+// 		match reader.read_event() {
+// 			Ok(Event::Start(e)) => {
+// 				break Element { 
+// 					parent : ,
+// 					tag : e.name(),
+// 					attrs: e.attributes(),
+// 					childs : vec![]
+// 				}
+// 			}
+// 			Ok(Event::End(e)) => return Err(Error::InvalidCloseTag(pos)),
+// 			Ok(Event::Text(t)) => (), //ignore
+// 			Ok(Event::Comment(_)) => (), //ignore
+// 			Ok(Event::Empty(_)) => (), //ignore
+// 			Ok(Event::Eof) => {
+// 				return
+// 			},
+// 			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+// 			etc@ _ => {
+// 				todo!( "{:?}",etc )
+// 			}
+// 		}
+// 	}
+
+// 	match elem.tag.as_ref() {
+// 		b"flex" => {
+// 			if depth == 0 {
+// 				let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
+// 				write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
+// 			}
+
+// 			//if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
+// 			if let Some( Cow::Borrowed(b"column") ) = elem.attrs.get(b"direction") {
+// 				writeln!("let flex = Flex::column()");
+// 			} else {
+// 				writeln!("let flex = Flex::row()");
+// 			}
+// 		}
+// 		b"custom" => {
+// 			if depth != 0 {
+// 				return Err(Error::MustBeTopElement(reader.buffer_position()))
+// 			}
+// 			let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
+// 			write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
+// 		}
+// 		_ => ()
+// 	}
+
+// 	loop {
+// 		let pos = reader.buffer_position();
+// 		match reader.read_event() {
+// 			Ok(Event::Start(e)) => {
+// 				let mut child_elem = Element { 
+// 					parent : Some( elem ),
+// 					tag : e.name(),
+// 					attrs: e.attributes(),
+// 					childs : vec![]
+// 				};
+// 				child_count += 1;
+				
+// 				parse_content_recurrsive(depth+1, reader, &mut child_elem, &style, writer)?;
+// 				writeln!("let child_{}_{} = {{", depth, child_count);
+// 				writeln!("}}");
+
+// 				if elem.tag.as_ref() == b"flex" {
+// 					//TODO elem attribute check
+// 					writeln!("flex.with_child(child_{}_{});", depth, child_count);
+// 				}
+// 				elem.childs.push(child_elem);
+// 			}
+// 			Ok(Event::End(e)) => {
+// 				if e.name().as_ref() == elem.tag.as_ref() {
+// 					match elem.tag.as_ref() {
+// 						b"style" => {
+// 							let start_pos = reader.buffer_position();
+// 							match reader.read_to_end(e.name()) {
+// 								Ok(span) => {
+// 									style.parse_more( &xml[span] );
+// 								},
+// 								_ => return Err(Error::InvalidCloseTag(start_pos))
+// 							}
+// 						},
+// 						b"flex" => {
+// 							writeln!("flex");
+// 							if depth == 0 {
+// 								write!(writer,"}}\n").unwrap();
+// 							}
+// 						}
+// 						b"custom" => {
+// 							if depth == 0 {
+// 								writeln!("child_{}_{}", depth, child_count);
+// 								write!(writer,"}}\n").unwrap();
+// 							} else {
+// 								unreachable!()
+// 							}
+// 						}
+// 						b"label" => {
+// 							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
+// 							writeln!("let label = Label::new(\"{}\");", name );
+// 							writeln!("label");
+// 						}
+// 						b"button" => {
+// 							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Button") );
+// 							writeln!("let label_for_button = Label::new(\"{}\");", name );
+// 							writeln!("let button = Button::from_label(btn_label);");
+// 							writeln!("button");
+// 						},
+// 						_ => () //ignore all text like CRLF
+// 					};
+// 				}
+
+// 				//TODO : make EnvSetup
+// 				//TODO : bind events
+
+// 				break
+// 			}
+// 			Ok(Event::Text(t)) => {
+// 				// let text:&[u8] = text.as_ref();
+// 				// elem.text = Some(text);
+// 				text = Some(t);
+// 			}
+// 			Ok(Event::Comment(_)) => (), //ignore
+// 			Ok(Event::Empty(_)) => (), //ignore
+// 			Ok(Event::Eof) => {
+// 				return Err(Error::InvalidCloseTag(pos))
+// 			},
+// 			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+// 			etc@ _ => {
+// 				todo!( "{:?}",etc )
+// 			}
+// 		}
+// 	}
+	
+// 	Ok( () )
+// }
 
 
 #[cfg(test)]
@@ -301,12 +472,10 @@ mod test {
 		#pwd {color:white, background-color:black}
 		</style>
 
-		<custom fn="build_icon">
-			<flex direction="row">
-				<label style="font-size:25px">${icon_text}</label>
-				<label style="font-size:10px">${title}</label>
-			</flex>
-		</custom>
+		<flex fn="build_icon" direction="row">
+			<label style="font-size:25px">${icon_text}</label>
+			<label style="font-size:10px">${title}</label>
+		</flex>
 
 		<flex fn="build_main">
 			<label>Login..</label>
@@ -328,7 +497,7 @@ mod test {
 			</flex>
 		</flex>
 		"#;
-		let result = super::parse_xml( src );
+		let result = super::compile( src );
 		println!("Result : {:?}", result);
 		match result {
 			Ok(compiled) => println!("{}", compiled),
