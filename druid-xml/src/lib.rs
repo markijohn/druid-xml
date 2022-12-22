@@ -1,4 +1,6 @@
 
+use std::rc::Rc;
+
 use std::io::Write;
 use std::fmt::Write as FmtWrite;
 use std::borrow::Cow;
@@ -39,10 +41,9 @@ impl Error {
 
 #[derive(Debug,Clone)]
 struct Element<'a> {
-	parent : std::rc::Rc<Element<'a>>,
+	parent : Option<std::rc::Rc<Element<'a>>>,
 	tag : &'a [u8],
-	attrs : Attributes<'a>,
-	style : Option<StyleSheet<'a>>,
+	attrs : Attributes<'a>
 }
 
 impl <'a> simplecss::Element for Element<'a> {
@@ -78,7 +79,7 @@ trait AttributeGetter {
 }
 
 impl <'a> AttributeGetter for Attributes<'a> {
-    fn get(&self, name:&[u8]) -> Option<Cow<[u8]>> {
+    fn get(&self, name:&[u8]) -> Option<Cow<'a, [u8]>> {
         self.clone()
 		.find( |e| 
 			e.is_ok() && e.as_ref().unwrap().key.as_ref() == name
@@ -113,11 +114,11 @@ pub fn parse_xml(xml:&str) -> Result<String,Error> {
 					},
 					_ => {
 						let mut elem = Element { 
+							parent : None,
 							tag,
 							attrs: e.attributes(),
-							style: None,
 						};
-						parse_content_recurrsive(0, &mut reader, &mut elem, &style, &mut res)?;
+						parse_content_recurrsive(0, &mut reader, Rc::new(elem), &style, &mut res)?;
 					}
 				}
 
@@ -173,7 +174,7 @@ impl <'a> Iterator for AttributeIter<'a> {
     }
 }
 
-fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, elem:&'b mut Element, style:&StyleSheet, writer:&mut String) -> Result<(), Error> {
+fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, elem:Rc<Element>, style:&StyleSheet, writer:&mut String) -> Result<(), Error> {
 	//custom_ui();
 	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
 	let mut child_count = 0;
@@ -193,7 +194,8 @@ fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>
 				write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
 			}
 
-			if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
+			//if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
+			if let Some( Cow::Borrowed(b"column") ) = elem.attrs.get(b"direction") {
 				writeln!("let flex = Flex::column()");
 			} else {
 				writeln!("let flex = Flex::row()");
@@ -215,13 +217,13 @@ fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>
 			Ok(Event::Start(e)) => {
 				let name = e.name();
 				let mut child_elem = Element { 
+					parent : Some( elem.clone() ),
 					tag : name.as_ref(),
-					attrs: e.attributes(),
-					style: StyleSheet::new(),
+					attrs: e.attributes()
 				};
 				child_count += 1;
 				writeln!("let child_{}_{} = {{", depth, child_count);
-				parse_content_recurrsive(depth+1, reader, &mut child_elem, &style, writer)?;
+				parse_content_recurrsive(depth+1, reader, Rc::new(child_elem), &style, writer)?;
 				writeln!("}}");
 
 				if elem.tag == b"flex" {
