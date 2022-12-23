@@ -42,12 +42,9 @@ impl Error {
 
 #[derive(Debug,Clone)]
 struct Element<'a> {
-	parent : Option<*const Element<'a>>,
-	prev_sib : Option<*const Element<'a>>,
 	src_pos : usize,
 	bs : BytesStart<'a>,
 	text : Option<quick_xml::events::BytesText<'a>>,
-	childs : Vec<Element<'a>>
 }
 
 
@@ -58,15 +55,6 @@ impl <'a> Element<'a> {
 
 	pub fn attributes(&'a self) -> Attributes<'a> {
 		self.bs.attributes()
-	}
-
-	pub fn bind_for_query(&mut self) {
-		for (idx,elem) in self.childs.iter_mut().enumerate() {
-			elem.parent = Some(self as *const _);
-			if idx > 0 {
-				elem.prev_sib = Some(&self.childs[idx-1] as _);
-			}
-		}
 	}
 
 	pub fn write(&self, output:&mut String, style:&StyleSheet) {
@@ -85,42 +73,48 @@ impl <'a> Element<'a> {
 }
 
 
-// struct ElementWrap<'a> {
-// 	parent : Option<&'a ElementWrap<'a>>,
-// 	prev_sib : Option<&'a ElementWrap<'a>>,
-// 	elem : &'a Element<'a>
-// }
+struct ElementQueryWrap<'a> {
+	stack : &'a [Element<'a>],
+	elem_idx : usize,
+}
 
-// impl <'a> simplecss::Element for &ElementWrap<'a> {
-//     fn parent_element(&self) -> Option<Self> {
-//         self.parent.clone()
-//     }
+impl <'a> simplecss::Element for ElementQueryWrap<'a> {
+    fn parent_element(&self) -> Option<Self> {
+		if self.elem_idx > 0 {
+			Some( ElementQueryWrap { stack:self.stack, elem_idx:self.elem_idx-1 } )
+		} else {
+			None
+		}
+    }
 
-//     fn prev_sibling_element(&self) -> Option<Self> {
-//         //self.prev.as_ref().map( |e| e.as_ref().clone() )
-// 		todo!()
-//     }
+	// TODO
+	/// NOT SUPPORT AdjacentSibling 
+    fn prev_sibling_element(&self) -> Option<Self> {
+        None
+    }
 
-//     fn has_local_name(&self, name: &str) -> bool {
-//         //TODO : like <tag:localName ..>
-// 		false
-//     }
+    fn has_local_name(&self, name: &str) -> bool {
+        false
+    }
 
-//     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-// 		// if let Some(v) = self.attrs.get(local_name.as_bytes()) {
-// 		// 	return operator.matches( &String::from_utf8_lossy(&v) )
-// 		// }
+    fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
+		let elem = &self.stack[self.elem_idx];
+		if let Some(v) = elem.attributes().get(local_name.as_bytes()) {
+			return operator.matches( &String::from_utf8_lossy(&v) )
+		}
 
-// 		false
-//     }
+		false
+    }
 
-//     fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
-//         //TODO : 
-// 		//https://docs.rs/simplecss/latest/simplecss/enum.PseudoClass.html
-// 		//https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes
-// 		false
-//     }
-// }
+	// TODO
+	// NOT SUPPORT
+    fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
+        //TODO : 
+		//https://docs.rs/simplecss/latest/simplecss/enum.PseudoClass.html
+		//https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes
+		false
+    }
+}
 
 trait AttributeGetter {
 	fn get(&self, name:&[u8]) -> Option<Cow<[u8]>>;
@@ -228,21 +222,18 @@ impl <'a> Iterator for AttributeIter<'a> {
     }
 }
 
-fn parse_recurrsive<'a>(elem:&mut Element<'a>,reader:&mut Reader<&'a [u8]>) -> Result< (), Error> {
+
+fn parse_recurrsive<'a>(tree:&mut Vec<Element<'a>>, elem:&mut Element<'a>,reader:&mut Reader<&'a [u8]>) -> Result< (), Error> {
 	loop {
 		let pos = reader.buffer_position();
 		match reader.read_event() {
 			Ok(Event::Start(e)) => {
-				let mut child_elem = Element {
-					parent : None,
-					prev_sib : None,
+				let mut elem = Element {
 					src_pos : pos,
 					bs : e,
-					text : None,
-					childs : vec![]
+					text : None
 				};
-				parse_recurrsive(&mut child_elem, reader)?;				
-				elem.childs.push(child_elem);
+				parse_recurrsive(tree, &mut elem, reader)?;				
 			}
 			Ok(Event::End(e)) => {
 				if e.name() != elem.tag() {
@@ -286,7 +277,6 @@ fn parse_doc<'a>(xmlsrc:&'a str)
 	let mut root_elems:Vec<Element<'a>> = vec![];
 
 	'rootElem : loop {
-		//let mut stack:Vec<Pair<'a>> = vec![];
 		let mut stack:Vec<Element<'a>> = vec![];
 	
 		let next_root_elem = 'insideElem : loop {
@@ -304,11 +294,11 @@ fn parse_doc<'a>(xmlsrc:&'a str)
 						break None;
 					}
 					//stack.push( Pair { pos, bs:e, text:None, childs : vec![] } );
-					stack.push( Element { parent:None, prev_sib:None, src_pos:pos, bs: e, text: None, childs: vec![] } );
+					stack.push( Element { src_pos:pos, bs: e, text: None } );
 					text = None;
 				}
 				Ok(Event::End(e)) => {
-					if matches!(stack.last(), Some( Element { parent, prev_sib, src_pos, bs, text, childs } ) if bs.name().as_ref() == e.name().as_ref() ) {
+					if matches!(stack.last(), Some( Element { src_pos, bs, text } ) if bs.name().as_ref() == e.name().as_ref() ) {
 						//find end block
 						let mut last = stack.pop().unwrap();
 						last.text = text.take();
@@ -347,10 +337,6 @@ fn parse_doc<'a>(xmlsrc:&'a str)
 		if let Some(elem) = next_root_elem {
 			root_elems.push( elem );
 		}
-	}
-
-	for root_elem in root_elems.iter_mut() {
-		root_elem.bind_for_query();
 	}
 
 	Ok( (root_elems,style) )

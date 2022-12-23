@@ -1,0 +1,11 @@
+[package]
+name = "druid-xml-example"
+version = "0.1.0"
+license = "MIT"
+description = "druid-xml example"
+repository = "https://github.com/markijohn/druid-xml"
+edition = "2018"
+
+
+[dependencies]
+druid-xml-macro = {path="../druid-xml-macro"}

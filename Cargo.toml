@@ -2,4 +2,5 @@
 members = [
     "druid-xml",
     "druid-xml-macro",
+    "druid-xml-example"
 ]
