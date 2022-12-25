@@ -9,7 +9,10 @@ use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
 use quick_xml::events::{Event, BytesStart};
 use quick_xml::name::QName;
-use simplecss::StyleSheet;
+use simplecss::{StyleSheet, Declaration, DeclarationTokenizer};
+
+pub mod writer;
+use writer::{SourceGenerator, DruidGenerator};
 
 #[derive(Debug)]
 pub enum Error {
@@ -40,8 +43,9 @@ impl Error {
 	}
 }
 
+
 #[derive(Debug,Clone)]
-struct Element<'a> {
+pub(crate) struct Element<'a> {
 	src_pos : usize,
 	bs : BytesStart<'a>,
 	text : Option<quick_xml::events::BytesText<'a>>,
@@ -56,32 +60,17 @@ impl <'a> Element<'a> {
 	pub fn attributes(&'a self) -> Attributes<'a> {
 		self.bs.attributes()
 	}
-
-	pub fn write(&self, output:&mut String, style:&StyleSheet) {
-		//TODO
-
-		//Specific style
-		// let local_style = if let Some(lstyle) = self.attrs.get(b"style") {
-		// 	StyleSheet::parse( &String::from_utf8_lossy(&lstyle) )
-		// } else {
-		// 	StyleSheet::new()
-		// };
-
-
-		todo!()
-	}
 }
 
 
 struct ElementQueryWrap<'a> {
 	stack : &'a [Element<'a>],
-	elem_idx : usize,
 }
 
 impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     fn parent_element(&self) -> Option<Self> {
-		if self.elem_idx > 0 {
-			Some( ElementQueryWrap { stack:self.stack, elem_idx:self.elem_idx-1 } )
+		if self.stack.len() > 0 {
+			Some( ElementQueryWrap { stack:&self.stack[..self.stack.len()-1] } )
 		} else {
 			None
 		}
@@ -98,7 +87,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     }
 
     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-		let elem = &self.stack[self.elem_idx];
+		let elem = &self.stack[self.stack.len()-1];
 		if let Some(v) = elem.attributes().get(local_name.as_bytes()) {
 			return operator.matches( &String::from_utf8_lossy(&v) )
 		}
@@ -116,7 +105,8 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     }
 }
 
-trait AttributeGetter {
+
+pub(crate) trait AttributeGetter {
 	fn get(&self, name:&[u8]) -> Option<Cow<[u8]>>;
 	
 	fn get_result(&self, name:&'static str, pos:usize) -> Result<Cow<[u8]>,Error> {
@@ -139,60 +129,57 @@ impl <'a> AttributeGetter for Attributes<'a> {
 
 
 pub fn compile(xml:&str) -> Result<String,Error> {
-	let mut res = String::new();
-	let (elements,style) = parse_doc(xml)?;
-	println!("{:#?}", elements);
-	Ok( res )
+	let mut writer = DruidGenerator::new();
+	let mut style = StyleSheet::new();
+	let mut reader = Reader::from_str(xml);
+	loop {
+		let pos = reader.buffer_position();
+		match reader.read_event() {
+			Ok(Event::Start(e)) => {
+				match e.name().as_ref() {
+					b"style" => {
+						let start_pos = reader.buffer_position();
+						match reader.read_to_end(e.name()) {
+							Ok(span) => {
+								style.parse_more( &xml[span] );
+							},
+							_ => return Err(Error::InvalidCloseTag(start_pos))
+						}
+					},
+					_ => {
+						let mut elem = Element {
+							src_pos : pos,
+							bs : e,
+							text : None
+						};
+						let mut stack = vec![ elem ];
+						parse_recurrsive(&mut stack, &style, &mut reader, &mut writer)?;
+					}
+				}
+			},
 
-	// loop {
-	// 	match reader.read_event() {
-	// 		Ok(Event::Start(e)) => {
-	// 			let ename = e.name();
-	// 			let tag = ename.as_ref();
-	// 			match tag {
-	// 				b"style" => {
-	// 					let start_pos = reader.buffer_position();
-	// 					match reader.read_to_end(e.name()) {
-	// 						Ok(span) => {
-	// 							style.parse_more( &xml[span] );
-	// 						},
-	// 						_ => return Err(Error::InvalidCloseTag(start_pos))
-	// 					}
-	// 				},
-	// 				_ => {
-	// 					let mut elem = Element { 
-	// 						parent : None,
-	// 						tag : e.name(),
-	// 						attrs: e.attributes(),
-	// 						childs : vec![]
-	// 					};
-	// 					parse_content_recurrsive(0, &mut reader, &mut elem, &style, &mut res)?;
-	// 				}
-	// 			}
+			Err(e) => return Err(Error::XMLSyntaxError( (reader.buffer_position(),e) )),
+			// exits the loop when reaching end of file
+			Ok(Event::Eof) => break,
+			Ok(Event::Comment(_)) => (),
+			Ok(Event::CData(_)) => (),
+			Ok(Event::Empty(_)) => (),
+			Ok(Event::Decl(_)) => (),
+			Ok(Event::PI(_)) => (),
+			Ok(Event::DocType(_)) => (),
+			Ok(Event::Text(e)) => (), //ignore text from root node
+			// Ok(Event::End(e)) => (),
 
-	// 		},
-
-	// 		Err(e) => return Err(Error::XMLSyntaxError( (reader.buffer_position(),e) )),
-	// 		// exits the loop when reaching end of file
-	// 		Ok(Event::Eof) => return Ok(res),
-	// 		// Ok(Event::Comment(_)) => (),
-	// 		// Ok(Event::CData(_)) => (),
-	// 		// Ok(Event::Empty(_)) => (),
-	// 		// Ok(Event::Decl(_)) => (),
-	// 		// Ok(Event::PI(_)) => (),
-	// 		// Ok(Event::DocType(_)) => (),
-	// 		Ok(Event::Text(e)) => (), //ignore text from root node
-	// 		// Ok(Event::End(e)) => (),
-
-	// 		el @ _ => {
-	// 			println!("{:?}", el);
-	// 			return Err(Error::InvalidTopElement(reader.buffer_position()))
-	// 		}
-	// 	}
-	// }
-	
+			el @ _ => {
+				dbg!("{:?}", el);
+				return Err(Error::InvalidTopElement(reader.buffer_position()))
+			}
+		}
+	}
+	Ok( writer.into() )
 }
 
+#[allow(unused)]
 fn custom_ui<'a, IA, IS>(text:&'a str, attrs:IA, styles:IA)
 where IA:Iterator<Item=(&'a [u8],Cow<'a,[u8]>)>, IS:Iterator<Item=(&'a [u8], IA)> {
 
@@ -223,26 +210,52 @@ impl <'a> Iterator for AttributeIter<'a> {
 }
 
 
-fn parse_recurrsive<'a>(tree:&mut Vec<Element<'a>>, elem:&mut Element<'a>,reader:&mut Reader<&'a [u8]>) -> Result< (), Error> {
+fn parse_recurrsive<'a,W:SourceGenerator>(stack:&mut Vec<Element<'a>>, global_style:&StyleSheet<'a>,reader:&mut Reader<&'a [u8]>,w:&mut W) 
+-> Result< (), Error> {
+	let elem = stack.last().unwrap();
+	let elem_style = StyleSheet::new();
+	let elem_query = ElementQueryWrap { stack };
+
+	//just simplify ordered iteration without vec allocation (#id query first)
+	//Reference : https://www.w3.org/TR/selectors/#specificity
+	let style_decl_iter = 
+	global_style.rules.iter()
+	.filter( |e| e.selector.specificity()[0] == 1 )
+	.filter( |e| e.selector.matches(&elem_query) )
+	.chain(
+		global_style.rules.iter()
+		.filter( |e| e.selector.specificity()[0] != 1 )
+		.filter( |e| e.selector.matches(&elem_query) ) )
+	.map( |e| &e.declarations );
+	drop( elem_query );
+
+
+	let mut last_text = None;
+	
 	loop {
 		let pos = reader.buffer_position();
 		match reader.read_event() {
 			Ok(Event::Start(e)) => {
-				let mut elem = Element {
+				stack.push( Element {
 					src_pos : pos,
 					bs : e,
 					text : None
-				};
-				parse_recurrsive(tree, &mut elem, reader)?;				
+				} );
+				w.begin(stack, style_decl_iter)?;
+				parse_recurrsive(stack, global_style, reader, w)?;
 			}
 			Ok(Event::End(e)) => {
-				if e.name() != elem.tag() {
+				if e.name() == stack.last().unwrap().tag() {
+					stack.last_mut().unwrap().text = last_text.take();
+					w.end( stack, style_decl_iter)?;
+					stack.pop();
+				} else {
 					return Err(Error::InvalidCloseTag(pos))
 				}
 				break
 			}
 			Ok(Event::Text(t)) => {
-				elem.text = Some(t);
+				last_text = Some(t);				
 			}
 			Ok(Event::Comment(_)) => (), //ignore
 			Ok(Event::Empty(_)) => (), //ignore
@@ -250,8 +263,8 @@ fn parse_recurrsive<'a>(tree:&mut Vec<Element<'a>>, elem:&mut Element<'a>,reader
 				return Err(Error::InvalidCloseTag(pos))
 			},
 			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
-			etc@ _ => {
-				todo!( "{:?}",etc )
+			_etc@ _ => {
+				unimplemented!()
 			}
 		}
 	}
@@ -259,88 +272,90 @@ fn parse_recurrsive<'a>(tree:&mut Vec<Element<'a>>, elem:&mut Element<'a>,reader
 	Ok( () )
 }
 
-fn parse_doc<'a>(xmlsrc:&'a str) 
--> Result< (Vec<Element<'a>>,StyleSheet<'a>), Error> {
-	let mut reader = Reader::from_str( xmlsrc );
-	let mut style = StyleSheet::new();
-	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
-	let mut child_count = 0;
+// fn parse_doc<'a>(xmlsrc:&'a str) 
+// -> Result< (Vec<Element<'a>>,StyleSheet<'a>), Error> {
+// 	let mut reader = Reader::from_str( xmlsrc );
+// 	let mut style = StyleSheet::new();
+// 	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
+// 	let mut child_count = 0;
 
-	macro_rules! writeln {
-		( $($tts:tt)* ) => { {
-			write!(writer, "{}", std::iter::repeat('\t').take(depth+1).collect::<String>() ).unwrap();
-			write!(writer, $($tts)* ).unwrap();
-			write!(writer, "\n").unwrap();
-		} }
-	}
+// 	macro_rules! writeln {
+// 		( $($tts:tt)* ) => { {
+// 			write!(writer, "{}", std::iter::repeat('\t').take(depth+1).collect::<String>() ).unwrap();
+// 			write!(writer, $($tts)* ).unwrap();
+// 			write!(writer, "\n").unwrap();
+// 		} }
+// 	}
 
-	let mut root_elems:Vec<Element<'a>> = vec![];
+// 	let mut root_elems:Vec<Element<'a>> = vec![];
 
-	'rootElem : loop {
-		let mut stack:Vec<Element<'a>> = vec![];
+// 	'rootElem : loop {
+// 		let mut stack:Vec<Element<'a>> = vec![];
+// 		let mut child_idx = 0;
 	
-		let next_root_elem = 'insideElem : loop {
-			let pos = reader.buffer_position();
-			match reader.read_event() {
-				Ok(Event::Start(e)) => {
-					if e.name().as_ref() == b"style" {
-						let start_pos = reader.buffer_position();
-						match reader.read_to_end(e.name()) {
-							Ok(span) => {
-								style.parse_more( &xmlsrc[span] );
-							},
-							_ => return Err(Error::InvalidCloseTag(start_pos))
-						}
-						break None;
-					}
-					//stack.push( Pair { pos, bs:e, text:None, childs : vec![] } );
-					stack.push( Element { src_pos:pos, bs: e, text: None } );
-					text = None;
-				}
-				Ok(Event::End(e)) => {
-					if matches!(stack.last(), Some( Element { src_pos, bs, text } ) if bs.name().as_ref() == e.name().as_ref() ) {
-						//find end block
-						let mut last = stack.pop().unwrap();
-						last.text = text.take();
+// 		let next_root_elem = 'insideElem : loop {
+// 			let pos = reader.buffer_position();
+// 			match reader.read_event() {
+// 				Ok(Event::Start(e)) => {
+// 					if e.name().as_ref() == b"style" {
+// 						let start_pos = reader.buffer_position();
+// 						match reader.read_to_end(e.name()) {
+// 							Ok(span) => {
+// 								style.parse_more( &xmlsrc[span] );
+// 							},
+// 							_ => return Err(Error::InvalidCloseTag(start_pos))
+// 						}
+// 						break None;
+// 					}
+// 					//stack.push( Pair { pos, bs:e, text:None, childs : vec![] } );
+// 					stack.push( Element { src_pos:pos, tree_depth:stack.len(), idx:child_idx, bs: e, text: None } );
+// 					child_idx += 1;
+// 					text = None;
+// 				}
+// 				Ok(Event::End(e)) => {
+// 					if matches!(stack.last(), Some( Element { src_pos, tree_depth, idx, bs, text } ) if bs.name().as_ref() == e.name().as_ref() ) {
+// 						//find end block
+// 						let mut last = stack.pop().unwrap();
+// 						last.text = text.take();
 
-						if let Some(parent) = stack.last_mut() {
-							parent.childs.push( last );
-						} else {
-							if stack.len() == 0 {
-								break 'insideElem Some(last);
-							}
-						}
-					} else {
-						println!("????? : {:?} {:?}", e.name(), stack.last() );
-						return Err(Error::InvalidCloseTag(pos));
-					}
-				},
-				// Ok(Event::Comment(_)) => (),
-				// Ok(Event::CData(_)) => (),
-				// Ok(Event::Empty(_)) => (),
-				// Ok(Event::Decl(_)) => (),
-				// Ok(Event::PI(_)) => (),
-				// Ok(Event::DocType(_)) => (),
-				Ok(Event::Text(t)) => text = Some(t), //ignore
-				Ok(Event::Comment(_)) => (), //ignore
-				Ok(Event::Empty(_)) => (), //ignore
-				Ok(Event::Eof) => {
-					break 'rootElem
-				},
-				Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
-				etc@ _ => {
-					todo!( "{:?}",etc )
-				}
-			}
-		};
+// 						child_idx = 0;
+// 						if let Some(parent) = stack.last_mut() {
+// 							parent.childs.push( last );
+// 						} else {
+// 							if stack.len() == 0 {
+// 								break 'insideElem Some(last);
+// 							}
+// 						}
+// 					} else {
+// 						return Err(Error::InvalidCloseTag(pos));
+// 					}
+// 				},
+// 				// Ok(Event::Comment(_)) => (),
+// 				// Ok(Event::CData(_)) => (),
+// 				// Ok(Event::Empty(_)) => (),
+// 				// Ok(Event::Decl(_)) => (),
+// 				// Ok(Event::PI(_)) => (),
+// 				// Ok(Event::DocType(_)) => (),
+// 				Ok(Event::Text(t)) => text = Some(t), //ignore
+// 				Ok(Event::Comment(_)) => (), //ignore
+// 				Ok(Event::Empty(_)) => (), //ignore
+// 				Ok(Event::Eof) => {
+// 					break 'rootElem
+// 				},
+// 				Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+// 				etc@ _ => {
+// 					todo!( "{:?}",etc )
+// 				}
+// 			}
+// 		};
 
-		if let Some(elem) = next_root_elem {
-			root_elems.push( elem );
-		}
-	}
+// 		if let Some(elem) = next_root_elem {
+// 			root_elems.push( elem );
+// 		}
+// 	}
 
-	Ok( (root_elems,style) )
-}
+// 	Ok( (root_elems,style) )
+// }
 
 
 

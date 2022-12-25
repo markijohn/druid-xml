@@ -13,20 +13,20 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 		sep1 : Token![,],
 		xml_src : syn::LitStr,
 		sep2 : Option<Token![,]>,
-		maps : Vec<EventMap>,
+		maps : Vec<WidgetWrapper>,
 	}
 
 	//like syn::Arm
-	struct EventMap {
+	struct WidgetWrapper {
 		query : syn::LitStr,
 		sep : Token![=>],
 		bindfn : syn::ExprClosure,
 		sepe : Option<Token![,]>,
 	}
 
-	impl Parse for EventMap {
+	impl Parse for WidgetWrapper {
 		fn parse(input: ParseStream) -> Result<Self> {
-			Ok( EventMap {
+			Ok( WidgetWrapper {
 				query : input.parse()?,
 				sep : input.parse()?,
 				bindfn : input.parse()?,
@@ -41,9 +41,9 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 			let sep1 = input.parse()?;
 			let xml_src:syn::LitStr = input.parse()?;
 			let sep2 = input.parse()?;
-			let mut maps:Vec<EventMap> = vec![];
+			let mut maps:Vec<WidgetWrapper> = vec![];
 			loop {
-				if let Ok(ev) = input.parse::<EventMap>() {
+				if let Ok(ev) = input.parse::<WidgetWrapper>() {
 					maps.push( ev );
 				} else {
 					break
