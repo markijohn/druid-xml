@@ -9,8 +9,6 @@ use syn::parse::{Parse, ParseStream};
 pub fn druid_xml( input:TokenStream ) -> TokenStream {
 	
 	struct DruidXML {
-		mlens : syn::Ident,
-		sep1 : Token![,],
 		xml_src : syn::LitStr,
 		sep2 : Option<Token![,]>,
 		maps : Vec<WidgetWrapper>,
@@ -37,8 +35,6 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 
 	impl Parse for DruidXML {
 		fn parse(input: ParseStream) -> Result<Self> {
-			let mlens:syn::Ident = input.parse()?;
-			let sep1 = input.parse()?;
 			let xml_src:syn::LitStr = input.parse()?;
 			let sep2 = input.parse()?;
 			let mut maps:Vec<WidgetWrapper> = vec![];
@@ -49,7 +45,7 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 					break
 				}
 			}
-			Ok( DruidXML { mlens, sep1, xml_src, sep2, maps } )
+			Ok( DruidXML { xml_src, sep2, maps } )
 		}
 	}
 

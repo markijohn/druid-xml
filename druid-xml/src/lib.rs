@@ -1,8 +1,3 @@
-
-use std::rc::Rc;
-
-use std::io::Write;
-use std::fmt::Write as FmtWrite;
 use std::borrow::Cow;
 
 use quick_xml::events::attributes::Attributes;
@@ -17,6 +12,7 @@ use writer::{SourceGenerator, DruidGenerator};
 #[derive(Debug)]
 pub enum Error {
 	InvalidChild( usize ),
+	CloseWithoutStart( usize ),
 	InvalidCloseTag( usize ),
 	MustBeTopElement(usize),
 	AttributeRequired( (usize, &'static str)),
@@ -31,6 +27,7 @@ impl Error {
 	fn error_at(&self) -> usize {
 		match self {
 			Error::InvalidChild(s) => *s,
+			Error::CloseWithoutStart( s ) => *s,
 			Error::InvalidCloseTag(s) => *s,
 			Error::MustBeTopElement(s) => *s,
 			Error::AttributeRequired( (s, _)) => *s,
@@ -62,48 +59,6 @@ impl <'a> Element<'a> {
 	}
 }
 
-
-struct ElementQueryWrap<'a> {
-	stack : &'a [Element<'a>],
-}
-
-impl <'a> simplecss::Element for ElementQueryWrap<'a> {
-    fn parent_element(&self) -> Option<Self> {
-		if self.stack.len() > 0 {
-			Some( ElementQueryWrap { stack:&self.stack[..self.stack.len()-1] } )
-		} else {
-			None
-		}
-    }
-
-	// TODO
-	/// NOT SUPPORT AdjacentSibling 
-    fn prev_sibling_element(&self) -> Option<Self> {
-        None
-    }
-
-    fn has_local_name(&self, name: &str) -> bool {
-        false
-    }
-
-    fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-		let elem = &self.stack[self.stack.len()-1];
-		if let Some(v) = elem.attributes().get(local_name.as_bytes()) {
-			return operator.matches( &String::from_utf8_lossy(&v) )
-		}
-
-		false
-    }
-
-	// TODO
-	// NOT SUPPORT
-    fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
-        //TODO : 
-		//https://docs.rs/simplecss/latest/simplecss/enum.PseudoClass.html
-		//https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes
-		false
-    }
-}
 
 
 pub(crate) trait AttributeGetter {
@@ -152,8 +107,7 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 							bs : e,
 							text : None
 						};
-						let mut stack = vec![ elem ];
-						parse_recurrsive(&mut stack, &style, &mut reader, &mut writer)?;
+						parse_recurrsive(&mut vec![elem], &style, &mut reader, &mut writer)?;
 					}
 				}
 			},
@@ -167,8 +121,8 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 			Ok(Event::Decl(_)) => (),
 			Ok(Event::PI(_)) => (),
 			Ok(Event::DocType(_)) => (),
-			Ok(Event::Text(e)) => (), //ignore text from root node
-			// Ok(Event::End(e)) => (),
+			Ok(Event::Text(_)) => (), //ignore text from root node
+			Ok(Event::End(_)) => return Err(Error::CloseWithoutStart(reader.buffer_position())),
 
 			el @ _ => {
 				dbg!("{:?}", el);
@@ -212,24 +166,8 @@ impl <'a> Iterator for AttributeIter<'a> {
 
 fn parse_recurrsive<'a,W:SourceGenerator>(stack:&mut Vec<Element<'a>>, global_style:&StyleSheet<'a>,reader:&mut Reader<&'a [u8]>,w:&mut W) 
 -> Result< (), Error> {
-	let elem = stack.last().unwrap();
-	let elem_style = StyleSheet::new();
-	let elem_query = ElementQueryWrap { stack };
-
-	//just simplify ordered iteration without vec allocation (#id query first)
-	//Reference : https://www.w3.org/TR/selectors/#specificity
-	let style_decl_iter = 
-	global_style.rules.iter()
-	.filter( |e| e.selector.specificity()[0] == 1 )
-	.filter( |e| e.selector.matches(&elem_query) )
-	.chain(
-		global_style.rules.iter()
-		.filter( |e| e.selector.specificity()[0] != 1 )
-		.filter( |e| e.selector.matches(&elem_query) ) )
-	.map( |e| &e.declarations );
-	drop( elem_query );
-
-
+	w.begin(stack, global_style)?;
+	
 	let mut last_text = None;
 	
 	loop {
@@ -241,13 +179,12 @@ fn parse_recurrsive<'a,W:SourceGenerator>(stack:&mut Vec<Element<'a>>, global_st
 					bs : e,
 					text : None
 				} );
-				w.begin(stack, style_decl_iter)?;
 				parse_recurrsive(stack, global_style, reader, w)?;
 			}
 			Ok(Event::End(e)) => {
 				if e.name() == stack.last().unwrap().tag() {
 					stack.last_mut().unwrap().text = last_text.take();
-					w.end( stack, style_decl_iter)?;
+					w.end( stack, global_style)?;
 					stack.pop();
 				} else {
 					return Err(Error::InvalidCloseTag(pos))
@@ -358,160 +295,6 @@ fn parse_recurrsive<'a,W:SourceGenerator>(stack:&mut Vec<Element<'a>>, global_st
 // }
 
 
-
-// fn parse_content_recurrsive<'a:'b, 'b>(depth:usize, reader:&mut Reader<&'a [u8]>, writer:&mut String) -> Result<(), Error> {
-// 	//custom_ui();
-// 	//let mut prev:Option<Rc<Element<'b>>> = None;
-// 	let mut style = StyleSheet::new();
-// 	let mut text:Option<quick_xml::events::BytesText<'a>> = None;
-// 	let mut child_count = 0;
-
-// 	macro_rules! writeln {
-// 		( $($tts:tt)* ) => { {
-// 			write!(writer, "{}", std::iter::repeat('\t').take(depth+1).collect::<String>() ).unwrap();
-// 			write!(writer, $($tts)* ).unwrap();
-// 			write!(writer, "\n").unwrap();
-// 		} }
-// 	}
-
-// 	//find start element
-// 	let elem = loop {
-// 		match reader.read_event() {
-// 			Ok(Event::Start(e)) => {
-// 				break Element { 
-// 					parent : ,
-// 					tag : e.name(),
-// 					attrs: e.attributes(),
-// 					childs : vec![]
-// 				}
-// 			}
-// 			Ok(Event::End(e)) => return Err(Error::InvalidCloseTag(pos)),
-// 			Ok(Event::Text(t)) => (), //ignore
-// 			Ok(Event::Comment(_)) => (), //ignore
-// 			Ok(Event::Empty(_)) => (), //ignore
-// 			Ok(Event::Eof) => {
-// 				return
-// 			},
-// 			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
-// 			etc@ _ => {
-// 				todo!( "{:?}",etc )
-// 			}
-// 		}
-// 	}
-
-// 	match elem.tag.as_ref() {
-// 		b"flex" => {
-// 			if depth == 0 {
-// 				let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
-// 				write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
-// 			}
-
-// 			//if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
-// 			if let Some( Cow::Borrowed(b"column") ) = elem.attrs.get(b"direction") {
-// 				writeln!("let flex = Flex::column()");
-// 			} else {
-// 				writeln!("let flex = Flex::row()");
-// 			}
-// 		}
-// 		b"custom" => {
-// 			if depth != 0 {
-// 				return Err(Error::MustBeTopElement(reader.buffer_position()))
-// 			}
-// 			let fnname = elem.attrs.get_result("fn", reader.buffer_position())?;
-// 			write!(writer,"fn {}() {{\n", String::from_utf8_lossy(&fnname)).unwrap();
-// 		}
-// 		_ => ()
-// 	}
-
-// 	loop {
-// 		let pos = reader.buffer_position();
-// 		match reader.read_event() {
-// 			Ok(Event::Start(e)) => {
-// 				let mut child_elem = Element { 
-// 					parent : Some( elem ),
-// 					tag : e.name(),
-// 					attrs: e.attributes(),
-// 					childs : vec![]
-// 				};
-// 				child_count += 1;
-				
-// 				parse_content_recurrsive(depth+1, reader, &mut child_elem, &style, writer)?;
-// 				writeln!("let child_{}_{} = {{", depth, child_count);
-// 				writeln!("}}");
-
-// 				if elem.tag.as_ref() == b"flex" {
-// 					//TODO elem attribute check
-// 					writeln!("flex.with_child(child_{}_{});", depth, child_count);
-// 				}
-// 				elem.childs.push(child_elem);
-// 			}
-// 			Ok(Event::End(e)) => {
-// 				if e.name().as_ref() == elem.tag.as_ref() {
-// 					match elem.tag.as_ref() {
-// 						b"style" => {
-// 							let start_pos = reader.buffer_position();
-// 							match reader.read_to_end(e.name()) {
-// 								Ok(span) => {
-// 									style.parse_more( &xml[span] );
-// 								},
-// 								_ => return Err(Error::InvalidCloseTag(start_pos))
-// 							}
-// 						},
-// 						b"flex" => {
-// 							writeln!("flex");
-// 							if depth == 0 {
-// 								write!(writer,"}}\n").unwrap();
-// 							}
-// 						}
-// 						b"custom" => {
-// 							if depth == 0 {
-// 								writeln!("child_{}_{}", depth, child_count);
-// 								write!(writer,"}}\n").unwrap();
-// 							} else {
-// 								unreachable!()
-// 							}
-// 						}
-// 						b"label" => {
-// 							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
-// 							writeln!("let label = Label::new(\"{}\");", name );
-// 							writeln!("label");
-// 						}
-// 						b"button" => {
-// 							let name = text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Button") );
-// 							writeln!("let label_for_button = Label::new(\"{}\");", name );
-// 							writeln!("let button = Button::from_label(btn_label);");
-// 							writeln!("button");
-// 						},
-// 						_ => () //ignore all text like CRLF
-// 					};
-// 				}
-
-// 				//TODO : make EnvSetup
-// 				//TODO : bind events
-
-// 				break
-// 			}
-// 			Ok(Event::Text(t)) => {
-// 				// let text:&[u8] = text.as_ref();
-// 				// elem.text = Some(text);
-// 				text = Some(t);
-// 			}
-// 			Ok(Event::Comment(_)) => (), //ignore
-// 			Ok(Event::Empty(_)) => (), //ignore
-// 			Ok(Event::Eof) => {
-// 				return Err(Error::InvalidCloseTag(pos))
-// 			},
-// 			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
-// 			etc@ _ => {
-// 				todo!( "{:?}",etc )
-// 			}
-// 		}
-// 	}
-	
-// 	Ok( () )
-// }
-
-
 #[cfg(test)]
 mod test {
 	#[test]
@@ -524,6 +307,7 @@ mod test {
 		#pwd {color:white, background-color:black}
 		</style>
 
+		<!-- you can remove direction="column" attribute because that default value is "row" -->
 		<flex fn="build_icon" direction="row">
 			<label style="font-size:25px">${icon_text}</label>
 			<label style="font-size:10px">${title}</label>
@@ -536,9 +320,8 @@ mod test {
 			<widget name=native_custom_widget title="MAIN"/>
 			<widget name=native_custom_widget title="NO"/>
 			<icon title="Exit" icon="★" onclick="exit"/>
-
-			<!-- you can remove direction="col" attribute because that default value is "col" and also other all default value is ignorable -->
-			<flex cross_alignment="" main_alignment="" fill_major_axis="true">
+	
+			<flex direction="column" cross_alignment="" main_alignment="" fill_major_axis="true">
 				<label>ID</label><textbox class="normal" lens="id" value="Default Value" placeholder="Input here"/>
 				<label>PWD</label><textbox lens="pwd" placeholder="Your password"/>
 			</flex>
@@ -550,14 +333,13 @@ mod test {
 		</flex>
 		"#;
 		let result = super::compile( src );
-		println!("Result : {:?}", result);
 		match result {
 			Ok(compiled) => println!("{}", compiled),
-			Err(e) => { println!("Error : {}", &src[e.error_at() .. ])}
+			Err(e) => { println!("Error : {:?} : {}", e, &src[e.error_at() .. ])}
 		}
 	}
 
-	#[test]
+	//#[test]
 	fn stylesheet() {
 		//css order
 		//1. !important
