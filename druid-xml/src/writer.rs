@@ -1,7 +1,7 @@
 
 
 use std::borrow::Cow;
-use simplecss::{Declaration, DeclarationTokenizer, Rule, StyleSheet};
+use simplecss::{Declaration, DeclarationTokenizer, StyleSheet};
 use std::fmt::Write;
 
 use crate::{AttributeGetter, Element, Error};
@@ -13,7 +13,7 @@ struct ElementQueryWrap<'a> {
 
 impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     fn parent_element(&self) -> Option<Self> {
-		if self.stack.len() > 0 {
+		if self.stack.len() > 1 {
 			Some( ElementQueryWrap { stack:&self.stack[..self.stack.len()-1] } )
 		} else {
 			None
@@ -27,7 +27,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     }
 
     fn has_local_name(&self, name: &str) -> bool {
-        false
+        &self.stack[self.stack.len()-1].tag().0 == &name.as_bytes()
     }
 
     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
@@ -41,7 +41,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
 
 	// TODO
 	// NOT SUPPORT
-    fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
+    fn pseudo_class_matches(&self, _class: simplecss::PseudoClass) -> bool {
         //TODO : 
 		//https://docs.rs/simplecss/latest/simplecss/enum.PseudoClass.html
 		//https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes
@@ -77,7 +77,7 @@ impl DruidGenerator {
 
 
 impl SourceGenerator for DruidGenerator {
-    fn begin(&mut self, elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> {
+    fn begin(&mut self, elem_stack:&[Element], _css:&StyleSheet) -> Result<(),Error> {
         assert!( elem_stack.len() != 0 );
         let depth = elem_stack.len() - 1;
         let elem = &elem_stack[elem_stack.len()-1];
@@ -116,19 +116,16 @@ impl SourceGenerator for DruidGenerator {
         let depth = elem_stack.len() - 1;
         let elem = &elem_stack[elem_stack.len()-1];
 
-        let elem_style = StyleSheet::new();
         let elem_query = ElementQueryWrap { stack : elem_stack };
 
         //just simplify ordered iteration without vec allocation (#id query first)
         //Reference : https://www.w3.org/TR/selectors/#specificity
         let css_iter = 
         css.rules.iter()
-        .filter( |e| e.selector.specificity()[0] == 1 )
-        .filter( |e| e.selector.matches(&elem_query) )
+        .filter( |e| e.selector.specificity()[0] == 1 && e.selector.matches(&elem_query) )
         .chain(
             css.rules.iter()
-            .filter( |e| e.selector.specificity()[0] != 1 )
-            .filter( |e| e.selector.matches(&elem_query) ) )
+            .filter( |e| e.selector.specificity()[0] != 1 && e.selector.matches(&elem_query) ) )
         .map( |e| &e.declarations );
 
         macro_rules! writeln {
@@ -146,15 +143,15 @@ impl SourceGenerator for DruidGenerator {
 
         macro_rules! get_style {
             ($name:tt) => {
-                specific_style.iter().find( |e| e.name == $name ).or_else( || {
-                    for global_style in css_iter {
-                        let find = global_style.iter().find( |e| e.name == $name );
+                specific_style.iter().find( |e| e.name == $name ).map( |e| e.value ).or_else( || {
+                    for global_style in css_iter.clone() {
+                        let find = global_style.iter().find( |e| {println!("Find CSS : {} {}",e.name,$name); e.name == $name} ).map( |e| e.value );
                         if find.is_some() {
                             return find
                         }
                     }
                     None
-                });
+                })
             }
         }
 
@@ -170,7 +167,7 @@ impl SourceGenerator for DruidGenerator {
                 let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
                 writeln!(1,"let label = Label::new(\"{}\");", name );
                 if let Some(color) = get_style!("color") {
-                    
+                    writeln!(1,"label.set_text_color({});", CSSParse::color_attribute(color)? );
                 }
             }
             b"button" => {
@@ -186,5 +183,27 @@ impl SourceGenerator for DruidGenerator {
 
         
         Ok(())
+    }
+}
+
+
+struct CSSParse;
+
+impl CSSParse {
+    //TODO : Error check
+    /// [O] : rgb(0,255,0)
+    /// [O] : rgba(0,255,0,88)
+    /// [O] : #FF33FF
+    /// [O] : #FF33FF22
+    /// [X] : rgb(100%, 0, 25%, 2)
+    fn color_attribute(v:&str) -> Result<String,Error> {
+        let tv = v.trim();    
+        if tv.starts_with("rgba") && tv.ends_with(")") {
+            Ok( format!("Color::rgba8({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]) )
+        } else if tv.starts_with("rgb") && tv.ends_with(")") {
+            Ok( format!("Color::rgba({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]) )
+        } else {
+            Ok( format!("Color::from_hex_str({})",v) )
+        }
     }
 }

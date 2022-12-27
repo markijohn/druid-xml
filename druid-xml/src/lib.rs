@@ -4,7 +4,7 @@ use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
 use quick_xml::events::{Event, BytesStart};
 use quick_xml::name::QName;
-use simplecss::{StyleSheet, Declaration, DeclarationTokenizer};
+use simplecss::{StyleSheet};
 
 pub mod writer;
 use writer::{SourceGenerator, DruidGenerator};
@@ -16,6 +16,7 @@ pub enum Error {
 	InvalidCloseTag( usize ),
 	MustBeTopElement(usize),
 	AttributeRequired( (usize, &'static str)),
+	InvalidAttributeValue( (usize, &'static str) ),
 	ChildlessElement( usize ),
 	UnknownAttribute( usize ),
 	InvalidTopElement( usize ),
@@ -31,6 +32,7 @@ impl Error {
 			Error::InvalidCloseTag(s) => *s,
 			Error::MustBeTopElement(s) => *s,
 			Error::AttributeRequired( (s, _)) => *s,
+			Error::InvalidAttributeValue( (s, _) ) => *s,
 			Error::ChildlessElement(s) => *s,
 			Error::UnknownAttribute(s) => *s,
 			Error::InvalidTopElement(s) => *s,
@@ -96,13 +98,14 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 						let start_pos = reader.buffer_position();
 						match reader.read_to_end(e.name()) {
 							Ok(span) => {
-								style.parse_more( &xml[span] );
+								let css_impl = &xml[span];
+								style.parse_more( css_impl );
 							},
 							_ => return Err(Error::InvalidCloseTag(start_pos))
 						}
 					},
 					_ => {
-						let mut elem = Element {
+						let elem = Element {
 							src_pos : pos,
 							bs : e,
 							text : None
@@ -123,11 +126,6 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 			Ok(Event::DocType(_)) => (),
 			Ok(Event::Text(_)) => (), //ignore text from root node
 			Ok(Event::End(_)) => return Err(Error::CloseWithoutStart(reader.buffer_position())),
-
-			el @ _ => {
-				dbg!("{:?}", el);
-				return Err(Error::InvalidTopElement(reader.buffer_position()))
-			}
 		}
 	}
 	Ok( writer.into() )
@@ -141,10 +139,6 @@ where IA:Iterator<Item=(&'a [u8],Cow<'a,[u8]>)>, IS:Iterator<Item=(&'a [u8], IA)
 
 struct AttributeIter<'a> {
 	attrs : Attributes<'a>
-}
-
-struct StyleIter<'a> {
-	style : StyleSheet<'a>
 }
 
 impl <'a> Iterator for AttributeIter<'a> {
@@ -301,7 +295,7 @@ mod test {
 	fn test() {
 		let src = r#"
 		<style>
-		label:hover { color:#333333 }
+		label { color:#333333 }
 		button {color:black, background-color:white}
 		textbox {color:black, background-color:gray}
 		#pwd {color:white, background-color:black}
@@ -314,7 +308,7 @@ mod test {
 		</flex>
 
 		<flex fn="build_main">
-			<label>Login..</label>
+			<label style="color:black">Login..</label>
 
 			<widget name=native_custom_widget title="GO"/>
 			<widget name=native_custom_widget title="MAIN"/>

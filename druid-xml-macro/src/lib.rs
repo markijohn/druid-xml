@@ -1,6 +1,6 @@
 extern crate proc_macro;
 
-use proc_macro::{TokenStream, TokenTree};
+use proc_macro::{TokenStream};
 use syn::{parse_macro_input, Result, Token};
 use syn::parse::{Parse, ParseStream};
 
