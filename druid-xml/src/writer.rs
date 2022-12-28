@@ -82,29 +82,29 @@ impl SourceGenerator for DruidGenerator {
         let depth = elem_stack.len() - 1;
         let elem = &elem_stack[elem_stack.len()-1];
         let attrs = elem.attributes();
-        macro_rules! writeln {
+        macro_rules! write_src {
             ( $tab_add:tt , $($tts:tt)* ) => {
                 write!(self.writer, "{}", std::iter::repeat('\t').take(depth+$tab_add).collect::<String>() ).unwrap();
                 write!(self.writer, $($tts)* ).unwrap();
-                write!(self.writer, "\n").unwrap();
             };
         }
 
-        let tag = elem.tag();
-        if tag.as_ref() == b"flex" && depth == 0 {
+        let tag_qname = elem.tag();
+        let tag = String::from_utf8_lossy(tag_qname.as_ref());
+        if depth == 0 {
             let fnname = attrs.get_result("fn", elem.src_pos)?;
-            writeln!(0 , "fn {}() -> impl Widget", String::from_utf8_lossy(&fnname));
+            write_src!(0 , "fn {}() -> impl Widget\n", String::from_utf8_lossy(&fnname));
+        } else {
+            write_src!(0,"let child = {{\n");
         }
 
-        writeln!(0,"{{\n");
-
         match tag.as_ref() {
-            b"flex" => {
+            "flex" => {
                 //if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
                 if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
-                    writeln!(1,"let flex = Flex::column();");
+                    write_src!(1,"let flex = Flex::column();\n");
                 } else {
-                    writeln!(1,"let flex = Flex::row();");
+                    write_src!(1,"let flex = Flex::row();\n");
                 }
             }
             _ => ()
@@ -113,6 +113,7 @@ impl SourceGenerator for DruidGenerator {
     }
 
     fn end(&mut self, elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> {
+        assert!( elem_stack.len() != 0 );
         let depth = elem_stack.len() - 1;
         let elem = &elem_stack[elem_stack.len()-1];
 
@@ -128,11 +129,10 @@ impl SourceGenerator for DruidGenerator {
             .filter( |e| e.selector.specificity()[0] != 1 && e.selector.matches(&elem_query) ) )
         .map( |e| &e.declarations );
 
-        macro_rules! writeln {
+        macro_rules! write_src {
             ( $tab_add:tt , $($tts:tt)* ) => {
                 write!(self.writer, "{}", std::iter::repeat('\t').take(depth+$tab_add).collect::<String>() ).unwrap();
                 write!(self.writer, $($tts)* ).unwrap();
-                write!(self.writer, "\n").unwrap();
             };
         }
 
@@ -145,7 +145,7 @@ impl SourceGenerator for DruidGenerator {
             ($name:tt) => {
                 specific_style.iter().find( |e| e.name == $name ).map( |e| e.value ).or_else( || {
                     for global_style in css_iter.clone() {
-                        let find = global_style.iter().find( |e| {println!("Find CSS : {} {}",e.name,$name); e.name == $name} ).map( |e| e.value );
+                        let find = global_style.iter().find( |e| e.name == $name ).map( |e| e.value );
                         if find.is_some() {
                             return find
                         }
@@ -154,56 +154,113 @@ impl SourceGenerator for DruidGenerator {
                 })
             }
         }
+        
+        macro_rules! write_attr {
+            ( $tab_add:tt , $start:literal, $attr:literal, $end:literal ) => {
+                if let Some(value) = get_style!($attr) {
+                    write!(self.writer, "{}", std::iter::repeat('\t').take(depth+$tab_add).collect::<String>() ).unwrap();
+                    match $attr {
+                        "color" => CSSAttribute::color(&mut self.writer, value)?,
+                        "font-size" => CSSAttribute::font_size(&mut self.writer, value)?,
+                        _ => unreachable!()
+                    }
+                    write!(self.writer, $end ).unwrap();
+                }
+            };
+        }
 
-        let tag = elem.tag();
+        let parent_tag_holder = if depth > 0 {
+            Some(elem_stack[depth-1].tag())
+        } else {
+            None
+        };
+        let parent_tag = if let Some(parent_tag) = parent_tag_holder.as_ref() {
+            Some( String::from_utf8_lossy(parent_tag.as_ref()) )
+        } else {
+            None
+        };
+        let tag_qname = elem.tag();
+        let tag = String::from_utf8_lossy(tag_qname.as_ref());
 
         //TODO : Wrap EnvSetup
         //TODO : Bind event
         match tag.as_ref() {
-            b"flex" => {
+            "flex" => {
                 
             }
-            b"label" => {
+            "label" | "button" => {
                 let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
-                writeln!(1,"let label = Label::new(\"{}\");", name );
-                if let Some(color) = get_style!("color") {
-                    writeln!(1,"label.set_text_color({});", CSSParse::color_attribute(color)? );
+                write_src!(1,"let label = Label::new(\"{}\");\n", name );
+                write_attr!(1,"label.set_text_color(", "color", ");\n");
+                write_attr!(1,"label.set_text_size(", "font-size", ");\n");
+
+                if tag.as_ref() == "button" {
+                    write_src!(1,"let button = Button::from_label(label);\n");
                 }
-            }
-            b"button" => {
-                let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Button") );
-                writeln!(1,"let label_for_button = Label::new(\"{}\");", name );
-                writeln!(1,"let button = Button::from_label(btn_label);");
             }
             _ => ()
         }
 
-        writeln!(1,"{}", String::from_utf8_lossy(tag.as_ref()) ); //return element
-        writeln!(0,"}}\n"); //close with return
+        write_src!(1,"{}\n", tag ); //return element
+        write_src!(0,"}}\n;"); //close with return
 
+        //add to parent
+        if depth > 0 {
+            if let Some(parent_tag) = parent_tag {
+                match parent_tag.as_ref() {
+                    "flex" => { write_src!(0,"flex.with_child(child);\n"); }
+                    _ => ()
+                }
+            }
+        }
         
         Ok(())
     }
 }
 
 
-struct CSSParse;
+struct CSSAttribute;
 
-impl CSSParse {
+impl CSSAttribute {
     //TODO : Error check
     /// [O] : rgb(0,255,0)
     /// [O] : rgba(0,255,0,88)
     /// [O] : #FF33FF
     /// [O] : #FF33FF22
     /// [X] : rgb(100%, 0, 25%, 2)
-    fn color_attribute(v:&str) -> Result<String,Error> {
-        let tv = v.trim();    
-        if tv.starts_with("rgba") && tv.ends_with(")") {
-            Ok( format!("Color::rgba8({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]) )
+    fn color(w:&mut String, v:&str) -> Result<(),Error> {
+        let tv = v.trim();
+        if tv.ends_with("pt") {
+            write!(w,"Color::rgba8({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
         } else if tv.starts_with("rgb") && tv.ends_with(")") {
-            Ok( format!("Color::rgba({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]) )
+            write!(w,"Color::rgba({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
         } else {
-            Ok( format!("Color::from_hex_str({})",v) )
+            write!(w,"Color::from_hex_str(\"{}\")",v).unwrap()
         }
+        Ok(())
+    }
+
+    //Reference : https://simplecss.eu/pxtoems.html
+    fn font_size(w:&mut String, v:&str) -> Result<(),Error> {
+        let tv = v.trim();
+        match tv.as_bytes() {
+            [val @ .. , b'p', b'x'] => write!(w,"{}", String::from_utf8_lossy(val) ).unwrap(),
+            [val @ .. , b'e', b'm'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
+            [val @ .. , b'p', b't'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap() ).unwrap() ,
+            [val @ .. , b'%'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap() ).unwrap(),
+            val @ _ => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
+        }
+        Ok(())
+    }
+
+    fn text_align(w:&mut String, v:&str) -> Result<(), Error> {
+        match v {
+            "left" => write!(w, "druid::TextAlignment::Start").unwrap(),
+            "right" => write!(w, "druid::TextAlignment::End").unwrap(),
+            "center" => write!(w, "druid::TextAlignment::Center").unwrap(),
+            "justify" => write!(w, "druid::TextAlignment::Justify").unwrap(),
+            _ => return Err( Error::InvalidAttributeValue((0,"text-align")) )
+        }
+        Ok(())
     }
 }
