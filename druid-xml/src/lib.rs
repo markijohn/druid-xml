@@ -212,8 +212,8 @@ mod test {
 		let src = r#"
 		<style>
 		label { color:#333333 }
-		button {color:black, background-color:white}
-		textbox {color:black, background-color:gray}
+		button {color:black; background-color:white}
+		textbox {color:black; background-color:gray}
 		#pwd {color:white, background-color:black}
 		</style>
 
@@ -224,7 +224,7 @@ mod test {
 		</flex>
 
 		<flex fn="build_main">
-			<label style="color:black">Login..</label>
+			<label style="color:black; font-size:12em">Login..</label>
 
 			<widget name=native_custom_widget title="GO"/>
 			<widget name=native_custom_widget title="MAIN"/>

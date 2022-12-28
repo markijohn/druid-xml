@@ -159,6 +159,7 @@ impl SourceGenerator for DruidGenerator {
             ( $tab_add:tt , $start:literal, $attr:literal, $end:literal ) => {
                 if let Some(value) = get_style!($attr) {
                     write!(self.writer, "{}", std::iter::repeat('\t').take(depth+$tab_add).collect::<String>() ).unwrap();
+                    write!(self.writer, $start ).unwrap();
                     match $attr {
                         "color" => CSSAttribute::color(&mut self.writer, value)?,
                         "font-size" => CSSAttribute::font_size(&mut self.writer, value)?,
@@ -202,7 +203,7 @@ impl SourceGenerator for DruidGenerator {
         }
 
         write_src!(1,"{}\n", tag ); //return element
-        write_src!(0,"}}\n;"); //close with return
+        write_src!(0,"}};\n"); //close with return
 
         //add to parent
         if depth > 0 {
