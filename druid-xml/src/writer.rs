@@ -191,6 +191,7 @@ impl SourceGenerator for DruidGenerator {
             }
             "label" | "button" => {
                 let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
+                
                 write_src!(1,"let label = Label::new(\"{}\");\n", name );
                 write_attr!(1,"label.set_text_color(", "color", ");\n");
                 write_attr!(1,"label.set_text_size(", "font-size", ");\n");
@@ -241,10 +242,17 @@ impl CSSAttribute {
         Ok(())
     }
 
-    //Reference : https://simplecss.eu/pxtoems.html
+    //Reference : https://simplecss.eu/pxtoems.html or https://websemantics.uk/tools/font-size-conversion-pixel-point-em-rem-percent/
     fn font_size(w:&mut String, v:&str) -> Result<(),Error> {
         let tv = v.trim();
         match tv.as_bytes() {
+            b"xx-small" => write!(w,"9" ).unwrap(),
+            b"x-small" => write!(w,"10" ).unwrap(),
+            b"small" => write!(w,"13.333" ).unwrap(),
+            b"medium" => write!(w,"16" ).unwrap(),
+            b"large" => write!(w,"18" ).unwrap(),
+            b"x-large" => write!(w,"24" ).unwrap(),
+            b"xx-large" => write!(w,"32" ).unwrap(),
             [val @ .. , b'p', b'x'] => write!(w,"{}", String::from_utf8_lossy(val) ).unwrap(),
             [val @ .. , b'e', b'm'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
             [val @ .. , b'p', b't'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap() ).unwrap() ,
