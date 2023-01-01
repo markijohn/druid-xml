@@ -7,6 +7,7 @@ use quick_xml::name::QName;
 use simplecss::{StyleSheet};
 
 pub mod writer;
+mod named_color;
 use writer::{SourceGenerator, DruidGenerator};
 
 #[derive(Debug)]

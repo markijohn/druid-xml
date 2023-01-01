@@ -1,9 +1,11 @@
 
 
 use std::borrow::Cow;
+use quick_xml::name;
 use simplecss::{Declaration, DeclarationTokenizer, StyleSheet};
 use std::fmt::Write;
 
+use crate::named_color;
 use crate::{AttributeGetter, Element, Error};
 
 
@@ -163,6 +165,7 @@ impl SourceGenerator for DruidGenerator {
                     match $attr {
                         "color" => CSSAttribute::color(&mut self.writer, value)?,
                         "font-size" => CSSAttribute::font_size(&mut self.writer, value)?,
+                        "border" => CSSAttribute::border_color_and_width(&mut self.writer, value)?,
                         _ => unreachable!()
                     }
                     write!(self.writer, $end ).unwrap();
@@ -189,16 +192,23 @@ impl SourceGenerator for DruidGenerator {
             "flex" => {
                 
             }
-            "label" | "button" => {
+            "label" | "button" | "checkbox"=> {
                 let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
                 
                 write_src!(1,"let label = Label::new(\"{}\");\n", name );
                 write_attr!(1,"label.set_text_color(", "color", ");\n");
                 write_attr!(1,"label.set_text_size(", "font-size", ");\n");
 
-                if tag.as_ref() == "button" {
-                    write_src!(1,"let button = Button::from_label(label);\n");
+                match tag.as_ref() {
+                    "button" => { write_src!(1,"let button = Button::from_label(label);\n"); },
+                    "checkbox" => { write_src!(1,"let checkbox = Checkbox::new(label);\n"); },
+                    _ => ()
                 }
+            }
+            "container" => {
+                write_src!(1, "let container = Container::new(child);\n");
+                write_attr!(1,"container.set_background(", "background-color", ");\n");
+                write_attr!(1,"container.set_border(", "border", ");\n");
             }
             _ => ()
         }
@@ -211,6 +221,7 @@ impl SourceGenerator for DruidGenerator {
             if let Some(parent_tag) = parent_tag {
                 match parent_tag.as_ref() {
                     "flex" => { write_src!(0,"flex.with_child(child);\n"); }
+                    "container" => { write_src!(0,"let container = Container::new(child);\n"); } //border-color,border-width,border-round,background
                     _ => ()
                 }
             }
@@ -237,7 +248,21 @@ impl CSSAttribute {
         } else if tv.starts_with("rgb") && tv.ends_with(")") {
             write!(w,"Color::rgba({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
         } else {
-            write!(w,"Color::from_hex_str(\"{}\")",v).unwrap()
+            if let Some(col) = named_color::named_color(v) {
+                w.push_str(col);
+            } else {
+                write!(w,"Color::from_hex_str(\"{}\")",v).unwrap()
+            }
+        }
+        Ok(())
+    }
+
+    fn size(w:&mut String, v:&str) -> Result<(), Error> {
+        let tv = v.trim();
+        match tv.as_bytes() {
+            [val @ .. , b'p', b'x'] => write!(w,"{}", String::from_utf8_lossy(val) ).unwrap(),
+            [val @ .. , b'e', b'm'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
+            val @ _ => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
         }
         Ok(())
     }
@@ -271,5 +296,19 @@ impl CSSAttribute {
             _ => return Err( Error::InvalidAttributeValue((0,"text-align")) )
         }
         Ok(())
+    }
+
+    fn border_color_and_width(w:&mut String, v:&str) -> Result<(), Error> {
+        let mut splited = v.split_whitespace();
+        let width = splited.next().map( |v| v[..v.find("px").unwrap_or(v.len())].parse::<f64>().unwrap() ).unwrap_or(1f64);
+        //TODO : support other border style?
+        let _border_style = splited.next().unwrap_or("solid");
+        if _border_style != "solid" {
+            Err(Error::InvalidAttributeValue((0,"border")))
+        } else {
+            let color = splited.next().unwrap_or("black");
+            write!(w,"{},", width).unwrap();
+            Self::color(w,color)
+        }
     }
 }
