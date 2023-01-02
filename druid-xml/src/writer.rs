@@ -166,7 +166,10 @@ impl SourceGenerator for DruidGenerator {
                         "color" => CSSAttribute::color(&mut self.writer, value)?,
                         "font-size" => CSSAttribute::font_size(&mut self.writer, value)?,
                         "border" => CSSAttribute::border_color_and_width(&mut self.writer, value)?,
-                        _ => unreachable!()
+                        "text-align" => CSSAttribute::text_align(&mut self.writer, value)?,
+                        "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
+                        "object-fit" => CSSAttribute::object_fit(&mut self.writer, value)?,
+                        _ => unimplemented!("unknown css attribute : {}", $attr)
                     }
                     write!(self.writer, $end ).unwrap();
                 }
@@ -186,33 +189,52 @@ impl SourceGenerator for DruidGenerator {
         let tag_qname = elem.tag();
         let tag = String::from_utf8_lossy(tag_qname.as_ref());
 
+        let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
+        let input_type = String::from_utf8_lossy( input_type_holder );
         //TODO : Wrap EnvSetup
         //TODO : Bind event
-        match tag.as_ref() {
-            "flex" => {
-                
-            }
-            "label" | "button" | "checkbox"=> {
-                let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
-                
-                write_src!(1,"let label = Label::new(\"{}\");\n", name );
-                write_attr!(1,"label.set_text_color(", "color", ");\n");
-                write_attr!(1,"label.set_text_size(", "font-size", ");\n");
-
-                match tag.as_ref() {
-                    "button" => { write_src!(1,"let button = Button::from_label(label);\n"); },
-                    "checkbox" => { write_src!(1,"let checkbox = Checkbox::new(label);\n"); },
-                    _ => ()
-                }
-            }
-            "container" => {
-                write_src!(1, "let container = Container::new(child);\n");
-                write_attr!(1,"container.set_background(", "background-color", ");\n");
-                write_attr!(1,"container.set_border(", "border", ");\n");
-            }
-            _ => ()
+        if tag == "flex" {
+            //None
         }
 
+        else if tag == "label" || tag == "button" || tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
+            let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );               
+            write_src!(1,"let mut label = Label::new(\"{}\");\n", name );
+            write_attr!(1,"label.set_text_color(", "color", ");\n");
+            write_attr!(1,"label.set_text_size(", "font-size", ");\n");
+            write_attr!(1,"label.set_text_alignment(\"", "text-align", "\");\n");
+            if tag == "button" {
+                write_src!(1,"let button = Button::from_label(label);\n");
+            } else if tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
+                write_src!(1,"let checkbox = Checkbox::new(label);\n");
+            }
+        }
+
+        //TODO : password type?
+        else if tag == "textbox" || (tag == "input" && input_type == "text") {
+            write_src!(1,"let mut textbox = TextBox::new();\n" );
+            write_attr!(1,"textbox.set_text_color(", "color", ");\n");
+            write_attr!(1,"textbox.set_text_size(", "font-size", ");\n");
+            write_attr!(1,"textbox.set_place_holder(\"", "placeholder", "\");\n");
+            write_attr!(1,"textbox.set_text_alignment(\"", "text-align", "\");\n");
+        }
+
+        else if tag == "image" || tag == "img" {
+            let file_src = String::from_utf8_lossy( &attrs.get_result("src", 0)? );
+            write_src!(1, "let image_buf = druid::ImageBuf::from_file(v).unwrap();\n");
+            write_src!(1, "let mut image = druid::Image::new(image_buf);\n");
+            write_attr!(1, "image.set_fill_mode(\"", "object-fit" ,");\n");
+            write_attr!(1, "image.set_interpolation_mode(\"", "image-rendering" ,");\n");
+        }
+
+        else if tag == "container" {
+            write_src!(1, "let mut container = Container::new(child);\n");
+            write_attr!(1,"container.set_background(", "background-color", ");\n");
+            write_attr!(1,"container.set_border(", "border", ");\n");
+        }
+        else {
+            unimplemented!("Unknown tag : {}",tag);
+        }
         write_src!(1,"{}\n", tag ); //return element
         write_src!(0,"}};\n"); //close with return
 
@@ -243,16 +265,14 @@ impl CSSAttribute {
     /// [X] : rgb(100%, 0, 25%, 2)
     fn color(w:&mut String, v:&str) -> Result<(),Error> {
         let tv = v.trim();
-        if tv.ends_with("pt") {
+        if tv.starts_with("#") {
+            write!(w,"Color::from_hex_str({})", &tv[1..]).unwrap();
+        } else if tv.ends_with("pt") {
             write!(w,"Color::rgba8({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
         } else if tv.starts_with("rgb") && tv.ends_with(")") {
             write!(w,"Color::rgba({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
         } else {
-            if let Some(col) = named_color::named_color(v) {
-                w.push_str(col);
-            } else {
-                write!(w,"Color::from_hex_str(\"{}\")",v).unwrap()
-            }
+            return Err(Error::InvalidAttributeValue((0, "invalid color value")))
         }
         Ok(())
     }
@@ -310,5 +330,35 @@ impl CSSAttribute {
             write!(w,"{},", width).unwrap();
             Self::color(w,color)
         }
+    }
+
+    //https://developer.mozilla.org/en-US/docs/Web/CSS/object-fit
+    fn object_fit(w:&mut String, v:&str) -> Result<(), Error> {
+        match v.trim() {
+            "none" => write!(w,"FillStart::None").unwrap(), //Do not scale
+            "fill" | "" => write!(w,"FillStart::Fill").unwrap(), //(default) Fill the widget with no dead space, aspect ratio of widget is used
+            "contain" => write!(w,"FillStart::Contain").unwrap(), //As large as posible without changing aspect ratio of image and all of image shown
+            "cover" => write!(w,"FillStart::Cover").unwrap(), //As large as posible with no dead space so that some of the image may be clipped
+            "scale-down" => write!(w,"FillStart::ScaleDown").unwrap(), //Scale down to fit but do not scale up
+
+            //WARN : None-standard css attribute
+            "fit-width" => write!(w,"FillStart::FitWidth").unwrap(), //Fill the width with the images aspect ratio, some of the image may be clipped
+            "fit-height" => write!(w,"FillStart::FitHeight").unwrap(), //Fill the hight with the images aspect ratio, some of the image may be clipped
+            _ => return Err(Error::InvalidAttributeValue((0,"object-fit")))
+        }
+        Ok(())
+    }
+
+    //https://developer.mozilla.org/en-US/docs/Web/CSS/image-rendering
+    fn image_rendering(w:&mut String, v:&str) -> Result<(), Error> {
+        match v.trim() {
+            //TODO 
+            "auto" | "smooth" | "high-quality" | "crisp-edges" => write!(w,"InterpolationMode::Bilinear").unwrap(),
+
+            "pixelated" => write!(w,"InterpolationMode::NearestNeighbor").unwrap(),
+
+            _ => return Err(Error::InvalidAttributeValue((0,"image_rendering")))
+        }
+        Ok(())
     }
 }
