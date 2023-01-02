@@ -1,7 +1,8 @@
 
 
 use std::borrow::Cow;
-use quick_xml::name;
+use quick_xml::events::BytesStart;
+use quick_xml::name::{self, QName};
 use simplecss::{Declaration, DeclarationTokenizer, StyleSheet};
 use std::fmt::Write;
 
@@ -53,8 +54,8 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
 
 
 pub(crate) trait SourceGenerator {
-    fn begin(&mut self, elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> ;
-    fn end(&mut self, elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> ;
+    fn begin(&mut self, prev_childs:&[Element], elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> ;
+    fn end(&mut self, prev_childs:&[Element], elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> ;
 }
 
 pub struct DruidGenerator {
@@ -79,7 +80,7 @@ impl DruidGenerator {
 
 
 impl SourceGenerator for DruidGenerator {
-    fn begin(&mut self, elem_stack:&[Element], _css:&StyleSheet) -> Result<(),Error> {
+    fn begin(&mut self, prev_childs:&[Element], elem_stack:&[Element], _css:&StyleSheet) -> Result<(),Error> {
         assert!( elem_stack.len() != 0 );
         let depth = elem_stack.len() - 1;
         let elem = &elem_stack[elem_stack.len()-1];
@@ -114,7 +115,7 @@ impl SourceGenerator for DruidGenerator {
         Ok(())
     }
 
-    fn end(&mut self, elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> {
+    fn end(&mut self, prev_childs:&[Element], elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> {
         assert!( elem_stack.len() != 0 );
         let depth = elem_stack.len() - 1;
         let elem = &elem_stack[elem_stack.len()-1];
@@ -197,6 +198,7 @@ impl SourceGenerator for DruidGenerator {
             //None
         }
 
+        //WARN : checkbox is none-standard
         else if tag == "label" || tag == "button" || tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
             let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );               
             write_src!(1,"let mut label = Label::new(\"{}\");\n", name );
@@ -219,14 +221,37 @@ impl SourceGenerator for DruidGenerator {
             write_attr!(1,"textbox.set_text_alignment(\"", "text-align", "\");\n");
         }
 
+        //WARN : "image" is none-standard
         else if tag == "image" || tag == "img" {
-            let file_src = String::from_utf8_lossy( &attrs.get_result("src", 0)? );
-            write_src!(1, "let image_buf = druid::ImageBuf::from_file(v).unwrap();\n");
+            let file_src_holder = &attrs.get_result("src", 0)?;
+            let file_src = String::from_utf8_lossy( file_src_holder );
+            //TODO : more speedup as raw binary data
+            write_src!(1, "let image_buf = druid::ImageBuf::from_bytes( inclue_bytes!(\"{}\") ).unwrap();\n", &file_src);
             write_src!(1, "let mut image = druid::Image::new(image_buf);\n");
             write_attr!(1, "image.set_fill_mode(\"", "object-fit" ,");\n");
             write_attr!(1, "image.set_interpolation_mode(\"", "image-rendering" ,");\n");
         }
 
+        //WARN : list is none-standard
+        else if tag == "list" {
+            write_attr!(1, "let mut list = druid::List::new(", "fn" ,");\n");
+            if let Some( Cow::Borrowed(b"horizontal") ) = attrs.get(b"direction") {
+                write_src!(1, "list = list.horizontal();\n");
+            }
+            write_attr!(1, "list.set_spacing(", "spacing", ");\n");
+        }
+
+        //TODO : child must be two item
+        else if tag == "split" {
+
+        }
+
+        //TODO
+        else if tag == "painter" || tag == "canvas" {
+
+        }
+
+        //WARN : container is none-standard
         else if tag == "container" {
             write_src!(1, "let mut container = Container::new(child);\n");
             write_attr!(1,"container.set_background(", "background-color", ");\n");
@@ -265,14 +290,18 @@ impl CSSAttribute {
     /// [X] : rgb(100%, 0, 25%, 2)
     fn color(w:&mut String, v:&str) -> Result<(),Error> {
         let tv = v.trim();
-        if tv.starts_with("#") {
+        if tv.starts_with('#') {
             write!(w,"Color::from_hex_str({})", &tv[1..]).unwrap();
-        } else if tv.ends_with("pt") {
+        } else if tv.starts_with("rgb") && tv.ends_with(')') {
             write!(w,"Color::rgba8({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
-        } else if tv.starts_with("rgb") && tv.ends_with(")") {
+        } else if tv.starts_with("rgba") && tv.ends_with(')') {
             write!(w,"Color::rgba({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
         } else {
-            return Err(Error::InvalidAttributeValue((0, "invalid color value")))
+            if let Some(rgba) = named_color::named_color(v) {
+                write!(w,"{}", rgba).unwrap();
+            } else {
+                return Err(Error::InvalidAttributeValue((0, "invalid color value")))
+            }
         }
         Ok(())
     }

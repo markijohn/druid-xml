@@ -111,7 +111,7 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 							bs : e,
 							text : None
 						};
-						parse_recurrsive(&mut vec![elem], &style, &mut reader, &mut writer)?;
+						parse_recurrsive(&[], &mut vec![elem], &style, &mut reader, &mut writer)?;
 					}
 				}
 			},
@@ -159,9 +159,10 @@ impl <'a> Iterator for AttributeIter<'a> {
 }
 
 
-fn parse_recurrsive<'a,W:SourceGenerator>(stack:&mut Vec<Element<'a>>, global_style:&StyleSheet<'a>,reader:&mut Reader<&'a [u8]>,w:&mut W) 
+fn parse_recurrsive<'a,W:SourceGenerator>(prev_childs:&[Element<'a>], stack:&mut Vec<Element<'a>>, global_style:&StyleSheet<'a>,reader:&mut Reader<&'a [u8]>,w:&mut W) 
 -> Result< (), Error> {
-	w.begin(stack, global_style)?;
+	let mut childs_name = vec![];
+	w.begin(prev_childs, stack, global_style)?;
 	
 	let mut last_text = None;
 	
@@ -169,17 +170,19 @@ fn parse_recurrsive<'a,W:SourceGenerator>(stack:&mut Vec<Element<'a>>, global_st
 		let pos = reader.buffer_position();
 		match reader.read_event() {
 			Ok(Event::Start(e)) => {
-				stack.push( Element {
+				let e = Element {
 					src_pos : pos,
 					bs : e,
 					text : None
-				} );
-				parse_recurrsive(stack, global_style, reader, w)?;
+				};
+				stack.push( e.clone() );
+				parse_recurrsive(&childs_name, stack, global_style, reader, w)?;
 			}
 			Ok(Event::End(e)) => {
 				if e.name() == stack.last().unwrap().tag() {
 					stack.last_mut().unwrap().text = last_text.take();
-					w.end( stack, global_style)?;
+					w.end( &childs_name, stack, global_style)?;
+					childs_name.push( stack.last().unwrap().clone() );
 					stack.pop();
 				} else {
 					return Err(Error::InvalidCloseTag(pos))
