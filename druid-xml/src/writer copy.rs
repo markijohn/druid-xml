@@ -9,46 +9,33 @@ use std::fmt::Write;
 use crate::named_color;
 use crate::{AttributeGetter, Element, Error};
 
-/// stack[parent .. elem]
+
 struct ElementQueryWrap<'a> {
-	parent_stack : &'a [&'a Element<'a>],
-    elem : &'a Element<'a>
+	stack : &'a [Element<'a>],
 }
 
 impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     fn parent_element(&self) -> Option<Self> {
-        let len = self.parent_stack.len();
-		if len > 0 {
-			Some( ElementQueryWrap { 
-                parent_stack:&self.parent_stack[..len-1], 
-                elem:&self.parent_stack[len-1]
-            } )
+		if self.stack.len() > 1 {
+			Some( ElementQueryWrap { stack:&self.stack[..self.stack.len()-1] } )
 		} else {
 			None
 		}
     }
 
+	// TODO
+	/// NOT SUPPORT AdjacentSibling 
     fn prev_sibling_element(&self) -> Option<Self> {
-        let len = self.parent_stack.len();
-        if len > 1 {
-            let parent = &self.parent_stack[len-1];
-            if let Some( (idx,_finded)) = parent.childs.iter().enumerate().find( |(_idx,e)| e.src_pos == elem.src_pos ) {
-                if idx > 0 {
-                    return Some( ElementQueryWrap { 
-                        parent_stack:self.parent_stack,
-                        elem:&parent.childs[idx-1] } )
-                }
-            }
-		}
         None
     }
 
     fn has_local_name(&self, name: &str) -> bool {
-        &self.elem.tag().0 == &name.as_bytes()
+        &self.stack[self.stack.len()-1].tag().0 == &name.as_bytes()
     }
 
     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-		if let Some(v) = self.elem.attributes().get(local_name.as_bytes()) {
+		let elem = &self.stack[self.stack.len()-1];
+		if let Some(v) = elem.attributes().get(local_name.as_bytes()) {
 			return operator.matches( &String::from_utf8_lossy(&v) )
 		}
 
@@ -65,8 +52,10 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     }
 }
 
+
 pub(crate) trait SourceGenerator {
-    fn write(&mut self, elem:&Element, css:&StyleSheet) -> Result<(),Error>;
+    fn begin(&mut self, prev_childs:&[Element], elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> ;
+    fn end(&mut self, prev_childs:&[Element], elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> ;
 }
 
 pub struct DruidGenerator {
@@ -89,10 +78,49 @@ impl DruidGenerator {
     }
 }
 
-impl DruidGenerator {
-    fn impl_write(&mut self, parent_stack:&mut Vec<&Element>, elem:&Element, css:&StyleSheet) -> Result<(),Error> {
-        let depth = parent_stack.len();
-        let elem_query = ElementQueryWrap { parent_stack : parent_stack, elem };
+
+impl SourceGenerator for DruidGenerator {
+    fn begin(&mut self, prev_childs:&[Element], elem_stack:&[Element], _css:&StyleSheet) -> Result<(),Error> {
+        assert!( elem_stack.len() != 0 );
+        let depth = elem_stack.len() - 1;
+        let elem = &elem_stack[elem_stack.len()-1];
+        let attrs = elem.attributes();
+        macro_rules! write_src {
+            ( $tab_add:tt , $($tts:tt)* ) => {
+                write!(self.writer, "{}", std::iter::repeat('\t').take(depth+$tab_add).collect::<String>() ).unwrap();
+                write!(self.writer, $($tts)* ).unwrap();
+            };
+        }
+
+        let tag_qname = elem.tag();
+        let tag = String::from_utf8_lossy(tag_qname.as_ref());
+        if depth == 0 {
+            let fnname = attrs.get_result("fn", elem.src_pos)?;
+            write_src!(0 , "fn {}() -> impl Widget\n", String::from_utf8_lossy(&fnname));
+        } else {
+            write_src!(0,"let child = {{\n");
+        }
+
+        match tag.as_ref() {
+            "flex" => {
+                //if elem.attrs.find( |e| if let Ok(e) = e { e.key.as_ref() == b"column" } else { false }).is_some() {
+                if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
+                    write_src!(1,"let flex = Flex::column();\n");
+                } else {
+                    write_src!(1,"let flex = Flex::row();\n");
+                }
+            }
+            _ => ()
+        }
+        Ok(())
+    }
+
+    fn end(&mut self, prev_childs:&[Element], elem_stack:&[Element], css:&StyleSheet) -> Result<(),Error> {
+        assert!( elem_stack.len() != 0 );
+        let depth = elem_stack.len() - 1;
+        let elem = &elem_stack[elem_stack.len()-1];
+
+        let elem_query = ElementQueryWrap { stack : elem_stack };
 
         //just simplify ordered iteration without vec allocation (#id query first)
         //Reference : https://www.w3.org/TR/selectors/#specificity
@@ -104,15 +132,12 @@ impl DruidGenerator {
             .filter( |e| e.selector.specificity()[0] != 1 && e.selector.matches(&elem_query) ) )
         .map( |e| &e.declarations );
 
-        macro_rules! src {
-            ( $($tts:tt)* ) => { {
-                write!(self.writer, "{}", std::iter::repeat('\t').take(depth+1).collect::<String>() ).unwrap();
+        macro_rules! write_src {
+            ( $tab_add:tt , $($tts:tt)* ) => {
+                write!(self.writer, "{}", std::iter::repeat('\t').take(depth+$tab_add).collect::<String>() ).unwrap();
                 write!(self.writer, $($tts)* ).unwrap();
-            } }
+            };
         }
-
-        let tag_qname = elem.tag();
-        let tag = String::from_utf8_lossy(tag_qname.as_ref());
 
         let attrs = elem.attributes();
         let elem_style = attrs.get(b"style").unwrap_or( Cow::Borrowed(b"") );
@@ -133,22 +158,27 @@ impl DruidGenerator {
             }
         }
         
-        let attr = |name:&str| {
-            if let Some(value) = get_style!(name) {
-                match name {
-                    "color" => CSSAttribute::color(&mut self.writer, value)?,
-                    "font-size" => CSSAttribute::font_size(&mut self.writer, value)?,
-                    "border" => CSSAttribute::border_color_and_width(&mut self.writer, value)?,
-                    "text-align" => CSSAttribute::text_align(&mut self.writer, value)?,
-                    "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
-                    "object-fit" => CSSAttribute::object_fit(&mut self.writer, value)?,
-                    _ => unimplemented!("unknown css attribute : {}", name)
+        macro_rules! write_attr {
+            ( $tab_add:tt , $start:literal, $attr:literal, $end:literal ) => {
+                if let Some(value) = get_style!($attr) {
+                    write!(self.writer, "{}", std::iter::repeat('\t').take(depth+$tab_add).collect::<String>() ).unwrap();
+                    write!(self.writer, $start ).unwrap();
+                    match $attr {
+                        "color" => CSSAttribute::color(&mut self.writer, value)?,
+                        "font-size" => CSSAttribute::font_size(&mut self.writer, value)?,
+                        "border" => CSSAttribute::border_color_and_width(&mut self.writer, value)?,
+                        "text-align" => CSSAttribute::text_align(&mut self.writer, value)?,
+                        "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
+                        "object-fit" => CSSAttribute::object_fit(&mut self.writer, value)?,
+                        _ => unimplemented!("unknown css attribute : {}", $attr)
+                    }
+                    write!(self.writer, $end ).unwrap();
                 }
-            }
-        };
-        
+            };
+        }
+
         let parent_tag_holder = if depth > 0 {
-            Some(parent_stack[depth-1].tag())
+            Some(elem_stack[depth-1].tag())
         } else {
             None
         };
@@ -157,40 +187,38 @@ impl DruidGenerator {
         } else {
             None
         };
+        let tag_qname = elem.tag();
+        let tag = String::from_utf8_lossy(tag_qname.as_ref());
 
-        let mut is_common_text_style = false;
         let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
         let input_type = String::from_utf8_lossy( input_type_holder );
         //TODO : Wrap EnvSetup
         //TODO : Bind event
-        write!(self.writer, "{}{{", std::iter::repeat('\t').take(depth).collect::<String>() ).unwrap();
         if tag == "flex" {
-            if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
-                src!("let mut flex = Flex::column();\n");
-            } else {
-                src!("let mut flex = Flex::row();\n");
-            }
+            //None
         }
 
         //WARN : checkbox is none-standard
         else if tag == "label" || tag == "button" || tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
-            is_common_text_style = true;
-            let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
-            src!("let mut label = Label::new(\"{}\");\n", name );
-            
+            let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );               
+            write_src!(1,"let mut label = Label::new(\"{}\");\n", name );
+            write_attr!(1,"label.set_text_color(", "color", ");\n");
+            write_attr!(1,"label.set_text_size(", "font-size", ");\n");
+            write_attr!(1,"label.set_text_alignment(\"", "text-align", "\");\n");
             if tag == "button" {
-                write_src!("let button = Button::from_label(label);\n");
+                write_src!(1,"let button = Button::from_label(label);\n");
             } else if tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
-                write_src!("let checkbox = Checkbox::new(label);\n");
+                write_src!(1,"let checkbox = Checkbox::new(label);\n");
             }
         }
 
         //TODO : password type?
         else if tag == "textbox" || (tag == "input" && input_type == "text") {
-            write_src!("let mut textbox = TextBox::new();\n" );
-            
-            write_attr!("textbox.set_place_holder(\"", "placeholder", "\");\n");
-            
+            write_src!(1,"let mut textbox = TextBox::new();\n" );
+            write_attr!(1,"textbox.set_text_color(", "color", ");\n");
+            write_attr!(1,"textbox.set_text_size(", "font-size", ");\n");
+            write_attr!(1,"textbox.set_place_holder(\"", "placeholder", "\");\n");
+            write_attr!(1,"textbox.set_text_alignment(\"", "text-align", "\");\n");
         }
 
         //WARN : "image" is none-standard
@@ -198,65 +226,42 @@ impl DruidGenerator {
             let file_src_holder = &attrs.get_result("src", 0)?;
             let file_src = String::from_utf8_lossy( file_src_holder );
             //TODO : more speedup as raw binary data
-            src!( "let image_buf = druid::ImageBuf::from_bytes( inclue_bytes!(\"{}\") ).unwrap();\n", &file_src);
-            src!( "let mut image = druid::Image::new(image_buf);\n");
-            write_attr!( "image.set_fill_mode(\"", "object-fit" ,");\n");
-            write_attr!( "image.set_interpolation_mode(\"", "image-rendering" ,");\n");
+            write_src!(1, "let image_buf = druid::ImageBuf::from_bytes( inclue_bytes!(\"{}\") ).unwrap();\n", &file_src);
+            write_src!(1, "let mut image = druid::Image::new(image_buf);\n");
+            write_attr!(1, "image.set_fill_mode(\"", "object-fit" ,");\n");
+            write_attr!(1, "image.set_interpolation_mode(\"", "image-rendering" ,");\n");
         }
 
         //WARN : list is none-standard
         else if tag == "list" {
-            write_attr!( "let mut list = druid::List::new(", "fn" ,");\n");
+            write_attr!(1, "let mut list = druid::List::new(", "fn" ,");\n");
             if let Some( Cow::Borrowed(b"horizontal") ) = attrs.get(b"direction") {
-                write_src!( "list = list.horizontal();\n");
+                write_src!(1, "list = list.horizontal();\n");
             }
-            write_attr!( "list.set_spacing(", "spacing", ");\n");
+            write_attr!(1, "list.set_spacing(", "spacing", ");\n");
         }
 
         //TODO : child must be two item
         else if tag == "split" {
-            if elem.childs.len() != 2 {
-                return Err(Error::InvalidChildNum((elem.src_pos,2)))
-            }
-            parent_stack.push(elem);
-            self.impl_write(parent_stack, &elem.childs[0], css)?;
-            self.impl_write(parent_stack, &elem.childs[1], css)?;
+
         }
 
         //TODO
         else if tag == "painter" || tag == "canvas" {
-            
+
         }
 
         //WARN : container is none-standard
         else if tag == "container" {
-            if elem.childs.len() != 1 {
-                return Err(Error::InvalidChildNum((elem.src_pos,1)))
-            }
-            parent_stack.push(elem);
-            self.impl_write(parent_stack, &elem.childs[0], css)?;
-            write_src!( "let mut container = Container::new(child);\n");
-            write_attr!("container.set_background(", "background-color", ");\n");
-            write_attr!("container.set_border(", "border", ");\n");
+            write_src!(1, "let mut container = Container::new(child);\n");
+            write_attr!(1,"container.set_background(", "background-color", ");\n");
+            write_attr!(1,"container.set_border(", "border", ");\n");
         }
-        else {write_attr!("textbox.set_text_color(", "color", ");\n");
-            write_attr!("textbox.set_text_size(", "font-size", ");\n");
-            write_attr!("textbox.set_text_alignment(\"", "text-align", "\");\n");
+        else {
             unimplemented!("Unknown tag : {}",tag);
         }
-
-        if is_common_text_style {
-            
-            attr!("label.set_text_color(", "color", ");\n");
-            write_attr!("label.set_text_size(", "font-size", ");\n");
-            write_attr!("label.set_text_alignment(\"", "text-align", "\");\n");
-            src!("{}.set_text_color(", tag); attr!("color"); 
-            write_attr!("textbox.set_text_color(", "color", ");\n");
-            write_attr!("textbox.set_text_size(", "font-size", ");\n");
-            write_attr!("textbox.set_text_alignment(\"", "text-align", "\");\n");
-        }
-        write_src!("{}\n", tag ); //return element
-        write_src!("}};\n"); //close with return
+        write_src!(1,"{}\n", tag ); //return element
+        write_src!(0,"}};\n"); //close with return
 
         //add to parent
         if depth > 0 {
@@ -269,20 +274,7 @@ impl DruidGenerator {
             }
         }
         
-        //return
-        write_src!("{}\n", tag);
-
-        //close
-        write!(self.writer, "{}}};\n", std::iter::repeat('\t').take(depth).collect::<String>() ).unwrap();
-
         Ok(())
-    }
-}
-
-
-impl SourceGenerator for DruidGenerator {
-    fn write(&mut self, elem:&Element, css:&StyleSheet) -> Result<(),Error> {
-        self.impl_write(&mut vec![], elem, css)
     }
 }
 

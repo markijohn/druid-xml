@@ -12,7 +12,7 @@ use writer::{SourceGenerator, DruidGenerator};
 
 #[derive(Debug)]
 pub enum Error {
-	InvalidChildNum( (usize,usize) ),
+	InvalidChild( usize ),
 	CloseWithoutStart( usize ),
 	InvalidCloseTag( usize ),
 	MustBeTopElement(usize),
@@ -28,7 +28,7 @@ pub enum Error {
 impl Error {
 	fn error_at(&self) -> usize {
 		match self {
-			Error::InvalidChildNum( (s,_)) => *s,
+			Error::InvalidChild(s) => *s,
 			Error::CloseWithoutStart( s ) => *s,
 			Error::InvalidCloseTag(s) => *s,
 			Error::MustBeTopElement(s) => *s,
@@ -49,7 +49,6 @@ pub(crate) struct Element<'a> {
 	src_pos : usize,
 	bs : BytesStart<'a>,
 	text : Option<quick_xml::events::BytesText<'a>>,
-	childs : Vec<Element<'a>>
 }
 
 
@@ -107,7 +106,12 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 						}
 					},
 					_ => {
-						let (_text,elems) = parse_elements( &mut Reader::from_str(&xml[pos..]) )?;
+						let elem = Element {
+							src_pos : pos,
+							bs : e,
+							text : None
+						};
+						parse_recurrsive(&[], &mut vec![elem], &style, &mut reader, &mut writer)?;
 					}
 				}
 			},
@@ -155,8 +159,79 @@ impl <'a> Iterator for AttributeIter<'a> {
 }
 
 
-fn parse_elements<'a>(reader:&mut Reader<&'a [u8]>) 
--> Result< (Option<BytesText<'a>>,Vec<Element<'a>>) , Error> {
+fn parse_recurrsive<'a,W:SourceGenerator>(prev_childs:&[Element<'a>], stack:&mut Vec<Element<'a>>, global_style:&StyleSheet<'a>,reader:&mut Reader<&'a [u8]>,w:&mut W) 
+-> Result< (), Error> {
+	let mut childs_name = vec![];
+	w.begin(prev_childs, stack, global_style)?;
+	
+	let mut last_text = None;
+	
+	loop {
+		let pos = reader.buffer_position();
+		match reader.read_event() {
+			Ok(Event::Start(e)) => {
+				let e = Element {
+					src_pos : pos,
+					bs : e,
+					text : None
+				};
+				stack.push( e.clone() );
+				parse_recurrsive(&childs_name, stack, global_style, reader, w)?;
+			}
+			Ok(Event::End(e)) => {
+				if e.name() == stack.last().unwrap().tag() {
+					stack.last_mut().unwrap().text = last_text.take();
+					w.end( &childs_name, stack, global_style)?;
+					childs_name.push( stack.last().unwrap().clone() );
+					stack.pop();
+				} else {
+					return Err(Error::InvalidCloseTag(pos))
+				}
+				break
+			}
+			Ok(Event::Text(t)) => {
+				last_text = Some(t);				
+			}
+			Ok(Event::Comment(_)) => (), //ignore
+			Ok(Event::Empty(_)) => (), //ignore
+			Ok(Event::Eof) => {
+				return Err(Error::InvalidCloseTag(pos))
+			},
+			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+			_etc@ _ => {
+				unimplemented!()
+			}
+		}
+	}
+	
+	Ok( () )
+}
+
+
+
+
+#[derive(Debug,Clone)]
+pub(crate) struct Element2<'a> {
+	src_pos : usize,
+	bs : BytesStart<'a>,
+	text : Option<quick_xml::events::BytesText<'a>>,
+	childs : Vec<Element2<'a>>
+}
+
+
+impl <'a> Element2<'a> {
+	pub fn tag(&'a self) -> QName<'a> {
+		self.bs.name()
+	}
+
+	pub fn attributes(&'a self) -> Attributes<'a> {
+		self.bs.attributes()
+	}
+}
+
+
+fn parse_element<'a>(reader:&mut Reader<&'a [u8]>) 
+-> Result< (Option<BytesText<'a>>,Vec<Element2<'a>>) , Error> {
 	let mut elems = vec![];
 	let mut last_text = None;
 	
@@ -164,8 +239,8 @@ fn parse_elements<'a>(reader:&mut Reader<&'a [u8]>)
 		let pos = reader.buffer_position();
 		match reader.read_event() {
 			Ok(Event::Start(e)) => {
-				let (text,childs) = parse_elements(reader)?;
-				let e = Element {
+				let (text,childs) = parse_element(reader)?;
+				let e = Element2 {
 					src_pos : pos,
 					bs : e,
 					text,
