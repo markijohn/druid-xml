@@ -32,7 +32,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
         let len = self.parent_stack.len();
         if len > 1 {
             let parent = &self.parent_stack[len-1];
-            if let Some( (idx,_finded)) = parent.childs.iter().enumerate().find( |(_idx,e)| e.src_pos == elem.src_pos ) {
+            if let Some( (idx,_finded)) = parent.childs.iter().enumerate().find( |(_idx,e)| e.src_pos == self.elem.src_pos ) {
                 if idx > 0 {
                     return Some( ElementQueryWrap { 
                         parent_stack:self.parent_stack,
@@ -90,9 +90,9 @@ impl DruidGenerator {
 }
 
 impl DruidGenerator {
-    fn impl_write(&mut self, parent_stack:&mut Vec<&Element>, elem:&Element, css:&StyleSheet) -> Result<(),Error> {
+    fn impl_write(&mut self, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<(),Error> {
         let depth = parent_stack.len();
-        let elem_query = ElementQueryWrap { parent_stack : parent_stack, elem };
+        let elem_query = ElementQueryWrap { parent_stack, elem };
 
         //just simplify ordered iteration without vec allocation (#id query first)
         //Reference : https://www.w3.org/TR/selectors/#specificity
@@ -104,15 +104,9 @@ impl DruidGenerator {
             .filter( |e| e.selector.specificity()[0] != 1 && e.selector.matches(&elem_query) ) )
         .map( |e| &e.declarations );
 
-        macro_rules! src {
-            ( $($tts:tt)* ) => { {
-                write!(self.writer, "{}", std::iter::repeat('\t').take(depth+1).collect::<String>() ).unwrap();
-                write!(self.writer, $($tts)* ).unwrap();
-            } }
-        }
-
         let tag_qname = elem.tag();
         let tag = String::from_utf8_lossy(tag_qname.as_ref());
+        let mut tag_wrap:&str = &tag;
 
         let attrs = elem.attributes();
         let elem_style = attrs.get(b"style").unwrap_or( Cow::Borrowed(b"") );
@@ -132,95 +126,204 @@ impl DruidGenerator {
                 })
             }
         }
-        
-        let attr = |name:&str| {
-            if let Some(value) = get_style!(name) {
-                match name {
-                    "color" => CSSAttribute::color(&mut self.writer, value)?,
-                    "font-size" => CSSAttribute::font_size(&mut self.writer, value)?,
-                    "border" => CSSAttribute::border_color_and_width(&mut self.writer, value)?,
-                    "text-align" => CSSAttribute::text_align(&mut self.writer, value)?,
-                    "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
-                    "object-fit" => CSSAttribute::object_fit(&mut self.writer, value)?,
-                    _ => unimplemented!("unknown css attribute : {}", name)
+
+        macro_rules! _src {
+            ( $tab_add:expr, $($tts:tt)* ) => {
+                write!(self.writer, "{}", std::iter::repeat('\t').take($tab_add).collect::<String>() ).unwrap();
+                write!(self.writer, $($tts)* ).unwrap();
+            }
+        }
+
+        macro_rules! src {
+            ( $($tts:tt)* ) => { {
+                _src!( depth+1, $($tts)* );
+            } }
+        }
+
+        macro_rules! style {
+            ( $start:literal, $name:literal, $end:literal ) => {
+                if $name == "width-height" {
+                    if let (Some(width), Some(height)) = (get_style!("width") , get_style!("height")) {
+                        CSSAttribute::size(&mut self.writer, width).unwrap();
+                        _src!(0,",");
+                        CSSAttribute::size(&mut self.writer, height).unwrap();
+                    }
+                } else if let Some(value) = get_style!($name) {
+                    src!($start);
+                    match $name {
+                        "background-color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
+                        "color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
+                        "font-size" => CSSAttribute::font_size(&mut self.writer, value).unwrap(),
+                        "border" => CSSAttribute::border_color_and_width(&mut self.writer, value).unwrap(),
+                        "text-align" => CSSAttribute::text_align(&mut self.writer, value).unwrap(),
+                        "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
+                        "object-fit" => CSSAttribute::object_fit(&mut self.writer, value).unwrap(),
+                        "width" | "height" => CSSAttribute::size(&mut self.writer, value).unwrap(),
+                        "image-rendering" => CSSAttribute::image_rendering(&mut self.writer, value).unwrap(),
+                        _ => unimplemented!("unknown css attribute : {}", $name)
+                    }
+                    _src!( 0, $end );
                 }
             }
-        };
-        
-        let parent_tag_holder = if depth > 0 {
-            Some(parent_stack[depth-1].tag())
-        } else {
-            None
-        };
-        let parent_tag = if let Some(parent_tag) = parent_tag_holder.as_ref() {
-            Some( String::from_utf8_lossy(parent_tag.as_ref()) )
-        } else {
-            None
-        };
+        }
 
-        let mut is_common_text_style = false;
+        macro_rules! new_parent_stack {
+            () => {
+                new_parent_stack!( elem )
+            };
+            ( $new:ident ) => { {
+                let mut new_stack = parent_stack.to_owned();
+                new_stack.push( $new );
+                new_stack
+            } }
+        }
+        
         let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
         let input_type = String::from_utf8_lossy( input_type_holder );
         //TODO : Wrap EnvSetup
         //TODO : Bind event
-        write!(self.writer, "{}{{", std::iter::repeat('\t').take(depth).collect::<String>() ).unwrap();
         if tag == "flex" {
             if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
                 src!("let mut flex = Flex::column();\n");
             } else {
                 src!("let mut flex = Flex::row();\n");
             }
+            if elem.childs.len() < 1 {
+                return Err(Error::InvalidFlexChildNum((elem.src_pos)))
+            }
+            if let Some(v) = attrs.get(b"cross_axis_alignment") {
+                let v = match v.as_ref() {
+                    b"start" => "CrossAxisAlignment::Start",
+                    b"center" => "CrossAxisAlignment::Center",
+                    b"end" => "CrossAxisAlignment::End",
+                    b"baseline" => "CrossAxisAlignment::Baseline",
+                    _ => return Err(Error::InvalidAttributeValue((elem.src_pos, "cross_axis_alignment")))
+                };
+                src!("flex.set_cross_axis_alignment({});\n", v);
+            }
+
+            if let Some(v) = attrs.get(b"axis_alignment") {
+                let v = match v.as_ref() {
+                    b"start" => "MainAxisAlignment::Start",
+                    b"center" => "MainAxisAlignment::Center",
+                    b"end" => "MainAxisAlignment::End",
+                    b"spacebetween" => "MainAxisAlignment::SpaceBetween",
+                    b"spaceevenly" => "MainAxisAlignment::SpaceEvenly",
+                    b"spacearound" => "MainAxisAlignment::SpaceAround",
+                    _ => return Err(Error::InvalidAttributeValue((elem.src_pos, "axis_alignment")))
+                };
+                src!("flex.set_main_axis_alignment({});\n", v);
+            }
+            
+
+            let new_stack = new_parent_stack!();
+            for child in elem.childs.iter() {
+                if child.tag().as_ref() == b"spacer" {
+                    if let Some(flex) = child.attributes().get(b"flex") {
+                        src!("flex.add_flex_spacer({});\n", String::from_utf8_lossy(&flex));
+                    } else {
+                        src!("flex.add_default_spacer( );\n");
+                    }
+                } else {
+                    src!("let child = {{\n");
+                    self.impl_write(&new_stack, child, css)?;
+                    src!("}};\n");
+                    if let Some(flex) =child.attributes().get(b"flex") {
+                        src!("flex.add_flex_child(child, {});\n", String::from_utf8_lossy(&flex));
+                    } else {
+                        src!("flex.add_child( child );\n");
+                    }
+                }
+            }
         }
 
         //WARN : checkbox is none-standard
         else if tag == "label" || tag == "button" || tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
-            is_common_text_style = true;
             let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
             src!("let mut label = Label::new(\"{}\");\n", name );
-            
+            style!("label.set_text_color(", "color", ");\n");
+            style!("label.set_text_size(", "font-size", ");\n");
+            style!("label.set_text_alignment(\"", "text-align", "\");\n");
+
             if tag == "button" {
-                write_src!("let button = Button::from_label(label);\n");
+                src!("let button = Button::from_label(label);\n");
             } else if tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
-                write_src!("let checkbox = Checkbox::new(label);\n");
+                tag_wrap = "checkbox";
+                src!("let checkbox = Checkbox::new(label);\n");
             }
         }
 
         //TODO : password type?
         else if tag == "textbox" || (tag == "input" && input_type == "text") {
-            write_src!("let mut textbox = TextBox::new();\n" );
-            
-            write_attr!("textbox.set_place_holder(\"", "placeholder", "\");\n");
-            
+            tag_wrap = "textbox";
+            src!("let mut textbox = TextBox::new();\n" );
+            style!("textbox.set_text_color(", "color", ");\n");
+            style!("textbox.set_text_size(", "font-size", ");\n");
+            style!("textbox.set_text_alignment(\"", "text-align", "\");\n");
+            style!("textbox.set_place_holder(\"", "placeholder", "\");\n");
         }
 
         //WARN : "image" is none-standard
         else if tag == "image" || tag == "img" {
+            tag_wrap = "image";
             let file_src_holder = &attrs.get_result("src", 0)?;
             let file_src = String::from_utf8_lossy( file_src_holder );
             //TODO : more speedup as raw binary data
-            src!( "let image_buf = druid::ImageBuf::from_bytes( inclue_bytes!(\"{}\") ).unwrap();\n", &file_src);
-            src!( "let mut image = druid::Image::new(image_buf);\n");
-            write_attr!( "image.set_fill_mode(\"", "object-fit" ,");\n");
-            write_attr!( "image.set_interpolation_mode(\"", "image-rendering" ,");\n");
+            src!( "let image_buf = ImageBuf::from_bytes( inclue_bytes!(\"{}\") ).unwrap();\n", &file_src);
+            src!( "let mut image = Image::new(image_buf);\n");
+            style!( "image.set_fill_mode(\"", "object-fit" ,");\n");
+            style!( "image.set_interpolation_mode(\"", "image-rendering" ,");\n");
         }
 
         //WARN : list is none-standard
         else if tag == "list" {
-            write_attr!( "let mut list = druid::List::new(", "fn" ,");\n");
+            style!( "let mut list = List::new(", "fn" ,");\n");
             if let Some( Cow::Borrowed(b"horizontal") ) = attrs.get(b"direction") {
-                write_src!( "list = list.horizontal();\n");
+                src!( "list = list.horizontal();\n");
             }
-            write_attr!( "list.set_spacing(", "spacing", ");\n");
+            style!( "list.set_spacing(", "spacing", ");\n");
+        }
+
+        else if tag == "scroll" {
+            src!("let mut scroll = Scroll::new()")
+        }
+
+        else if tag == "slider" {
+
+        }
+
+        else if tag == "spinner" {
+
         }
 
         //TODO : child must be two item
         else if tag == "split" {
             if elem.childs.len() != 2 {
-                return Err(Error::InvalidChildNum((elem.src_pos,2)))
+                return Err(Error::InvalidSplitChildNum(elem.src_pos))
             }
-            parent_stack.push(elem);
-            self.impl_write(parent_stack, &elem.childs[0], css)?;
-            self.impl_write(parent_stack, &elem.childs[1], css)?;
+            let new_stack = new_parent_stack!();
+            src!("let one = {{\n");
+            self.impl_write(&new_stack, &elem.childs[0], css)?;
+            src!("}};");
+
+            src!("let two = {{\n");
+            self.impl_write(&new_stack, &elem.childs[1], css)?;
+            src!("}};");
+
+            if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
+                src!("let mut split = Split::columns(one, two);\n");
+            } else {
+                src!("let mut split = Split::rows(one, two);\n");
+            }
+            
+        }
+
+        else if tag == "stepper" {
+
+        }
+
+        else if tag == "switch" {
+
         }
 
         //TODO
@@ -231,49 +334,37 @@ impl DruidGenerator {
         //WARN : container is none-standard
         else if tag == "container" {
             if elem.childs.len() != 1 {
-                return Err(Error::InvalidChildNum((elem.src_pos,1)))
+                return Err(Error::InvalidContainerChildNum(elem.src_pos))
             }
-            parent_stack.push(elem);
-            self.impl_write(parent_stack, &elem.childs[0], css)?;
-            write_src!( "let mut container = Container::new(child);\n");
-            write_attr!("container.set_background(", "background-color", ");\n");
-            write_attr!("container.set_border(", "border", ");\n");
+            let new_stack = new_parent_stack!();
+            src!("let child = {{\n");
+            self.impl_write(&new_stack, &elem.childs[0], css)?;
+            src!("}};\n");
+
+            src!( "let mut container = Container::new(child);\n");
+            style!("container.set_background(", "background-color", ");\n");
+            style!("container.set_border(", "border", ");\n");
         }
-        else {write_attr!("textbox.set_text_color(", "color", ");\n");
-            write_attr!("textbox.set_text_size(", "font-size", ");\n");
-            write_attr!("textbox.set_text_alignment(\"", "text-align", "\");\n");
+        else {
             unimplemented!("Unknown tag : {}",tag);
         }
 
-        if is_common_text_style {
-            
-            attr!("label.set_text_color(", "color", ");\n");
-            write_attr!("label.set_text_size(", "font-size", ");\n");
-            write_attr!("label.set_text_alignment(\"", "text-align", "\");\n");
-            src!("{}.set_text_color(", tag); attr!("color"); 
-            write_attr!("textbox.set_text_color(", "color", ");\n");
-            write_attr!("textbox.set_text_size(", "font-size", ");\n");
-            write_attr!("textbox.set_text_alignment(\"", "text-align", "\");\n");
-        }
-        write_src!("{}\n", tag ); //return element
-        write_src!("}};\n"); //close with return
 
-        //add to parent
-        if depth > 0 {
-            if let Some(parent_tag) = parent_tag {
-                match parent_tag.as_ref() {
-                    "flex" => { write_src!(0,"flex.with_child(child);\n"); }
-                    "container" => { write_src!(0,"let container = Container::new(child);\n"); } //border-color,border-width,border-round,background
-                    _ => ()
-                }
+        //all component
+        //background, padding, 
+        {
+            if attrs.get(b"width").is_some() && attrs.get(b"height").is_some() {
+                style!("{tag_wrap} = {tag_wrap}.fix_size(" , "width-height", ");\n" );
+            } else {
+                style!("{tag_wrap} = {tag_wrap}.fix_width(" , "width", ");\n" );
+                style!("{tag_wrap} = {tag_wrap}.fix_height(" , "height", ");\n" );    
             }
+            
+            style!("{tag_wrap} = {tag_wrap}.background(" , "background-color", ");\n" );
+            style!("{tag_wrap} = {tag_wrap}.border(" , "border", ");\n" );
         }
-        
-        //return
-        write_src!("{}\n", tag);
 
-        //close
-        write!(self.writer, "{}}};\n", std::iter::repeat('\t').take(depth).collect::<String>() ).unwrap();
+        src!("{}\n", tag_wrap ); //return element
 
         Ok(())
     }

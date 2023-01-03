@@ -12,26 +12,55 @@ use writer::{SourceGenerator, DruidGenerator};
 
 #[derive(Debug)]
 pub enum Error {
-	InvalidChildNum( (usize,usize) ),
+	///Flex child length at least 1
+	InvalidFlexChildNum( usize ),
+
+	///Split child length must be 2
+	InvalidSplitChildNum( usize ),
+
+	///Container child must be 1
+	InvalidContainerChildNum( usize ),
+
+	///Container child must be 1
+	InvalidScrollChildNum( usize ),
+
+	///detected close tag without start tag
 	CloseWithoutStart( usize ),
+
+	///start and close tag not matche
 	InvalidCloseTag( usize ),
-	MustBeTopElement(usize),
+
+	///Required attribute not exist
 	AttributeRequired( (usize, &'static str)),
+
+	///Invalid attribute value
 	InvalidAttributeValue( (usize, &'static str) ),
+
+	///That element can't have child
 	ChildlessElement( usize ),
+
+	///Unknown attribute
 	UnknownAttribute( usize ),
+
+	///Not available as top elment
 	InvalidTopElement( usize ),
+
+	///CSS syntax error
 	CSSSyntaxError( (usize,simplecss::Error) ),
+
+	///XML syntax error
 	XMLSyntaxError( (usize,quick_xml::Error) )
 }
 
 impl Error {
 	fn error_at(&self) -> usize {
 		match self {
-			Error::InvalidChildNum( (s,_)) => *s,
+			Error::InvalidFlexChildNum( s ) => *s,
+			Error::InvalidSplitChildNum( s ) => *s,
+			Error::InvalidContainerChildNum( s ) => *s,
+			Error::InvalidScrollChildNum( s ) => *s,
 			Error::CloseWithoutStart( s ) => *s,
 			Error::InvalidCloseTag(s) => *s,
-			Error::MustBeTopElement(s) => *s,
 			Error::AttributeRequired( (s, _)) => *s,
 			Error::InvalidAttributeValue( (s, _) ) => *s,
 			Error::ChildlessElement(s) => *s,
@@ -47,7 +76,8 @@ impl Error {
 #[derive(Debug,Clone)]
 pub(crate) struct Element<'a> {
 	src_pos : usize,
-	bs : BytesStart<'a>,
+	src_pos_end : usize,
+	bs : BytesStart<'a>, //Originally, I tried to save the QName, but since BytesStart has a Cow, it took a lifecycle problem. (Cow type is always do that)
 	text : Option<quick_xml::events::BytesText<'a>>,
 	childs : Vec<Element<'a>>
 }
@@ -106,8 +136,12 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 							_ => return Err(Error::InvalidCloseTag(start_pos))
 						}
 					},
-					_ => {
-						let (_text,elems) = parse_elements( &mut Reader::from_str(&xml[pos..]) )?;
+					_ => {						
+						if let Some(elem) = parse_element(pos, Some(Event::Start(e)), &mut reader )? {
+							writer.write(&elem, &style).unwrap();
+						} else {
+							break
+						}
 					}
 				}
 			},
@@ -155,29 +189,70 @@ impl <'a> Iterator for AttributeIter<'a> {
 }
 
 
-fn parse_elements<'a>(reader:&mut Reader<&'a [u8]>) 
--> Result< (Option<BytesText<'a>>,Vec<Element<'a>>) , Error> {
-	let mut elems = vec![];
+fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&mut Reader<&'a [u8]>) 
+-> Result< Option<Element<'a>> , Error> {
+	let mut elem:Option<Element> = None;
 	let mut last_text = None;
 	
 	loop {
-		let pos = reader.buffer_position();
-		match reader.read_event() {
+		let event = if let Some(e) = backward.take() {
+			Ok(e)
+		} else {
+			src_pos = reader.buffer_position();
+			reader.read_event()
+		};
+		match event {
 			Ok(Event::Start(e)) => {
-				let (text,childs) = parse_elements(reader)?;
-				let e = Element {
-					src_pos : pos,
-					bs : e,
-					text,
-					childs
-				};
-				elems.push( e );
+				if let Some( el) = elem.as_mut() {
+					let tag = el.tag();
+					let tag = tag.as_ref();
+					if tag == b"flex" {
+						//just ok
+					} else if tag == b"split" {
+						//must be two
+						if el.childs.len() == 2 {
+							return Err(Error::InvalidSplitChildNum(el.src_pos))
+						}
+					} else if tag == b"container" || tag == b"scroll" {
+						//must be one
+						if el.childs.len() == 1 {
+							return Err(Error::InvalidContainerChildNum(el.src_pos))
+						}
+					} else {
+						return Err(Error::ChildlessElement(el.src_pos))
+					}
+
+					if let Some(child) = parse_element(src_pos, Some(Event::Start(e)),reader)? {
+						el.childs.push( child );
+					}
+				} else {
+					elem = Some(Element {
+						src_pos,
+						src_pos_end : reader.buffer_position(),
+						bs : e,
+						text : last_text.take(),
+						childs : vec![]
+					});
+				}
 			}
 			Ok(Event::End(e)) => {
-				if e.name() == elems.last().unwrap().tag() {
-					elems.last_mut().unwrap().text = last_text.take();
+				//TODO : </input>,</spacer> ignorable
+
+				if let Some(mut el) = elem.as_mut() {
+					match e.name().as_ref() {
+						b"input" | b"spacer" => (), //ignorable
+						v @ _ => {
+							//check matching tag start and end
+							if v != el.tag().as_ref() {
+								return Err(Error::InvalidCloseTag(src_pos))
+							} else {
+								el.src_pos_end = reader.buffer_position();
+								el.text = last_text.take();			
+							}
+						}
+					}
 				} else {
-					return Err(Error::InvalidCloseTag(pos))
+					return Err(Error::InvalidCloseTag(src_pos))
 				}
 				break
 			}
@@ -187,16 +262,16 @@ fn parse_elements<'a>(reader:&mut Reader<&'a [u8]>)
 			Ok(Event::Comment(_)) => (), //ignore
 			Ok(Event::Empty(_)) => (), //ignore
 			Ok(Event::Eof) => {
-				return Err(Error::InvalidCloseTag(pos))
+				return Err(Error::InvalidCloseTag(src_pos))
 			},
-			Err(e) => return Err(Error::XMLSyntaxError( (pos,e) )),
+			Err(e) => return Err(Error::XMLSyntaxError( (src_pos,e) )),
 			_etc@ _ => {
 				unimplemented!()
 			}
 		}
 	}
 	
-	Ok( (last_text,elems) )
+	Ok( elem )
 }
 
 
