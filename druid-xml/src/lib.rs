@@ -103,6 +103,14 @@ pub(crate) trait AttributeGetter {
 		self.get(nameb)
 		.ok_or( Error::AttributeRequired((pos, name)) )
 	}
+
+	fn get_as<T: std::str::FromStr>(&self, name:&'static str, pos:usize) -> Result<T, Error> {
+		let e = self.get_result(name, pos)?;
+		match String::from_utf8_lossy(&e).parse::<T>() {
+			Ok(e) => Ok(e),
+			Err(e) => Err(Error::InvalidAttributeValue( (pos,name) ))
+		}
+	}
 }
 
 impl <'a> AttributeGetter for Attributes<'a> {
@@ -203,6 +211,7 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 		};
 		match event {
 			Ok(Event::Start(e)) => {
+				//check parentable element
 				if let Some( el) = elem.as_mut() {
 					let tag = el.tag();
 					let tag = tag.as_ref();
@@ -226,13 +235,19 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 						el.childs.push( child );
 					}
 				} else {
-					elem = Some(Element {
+					let el = Element {
 						src_pos,
 						src_pos_end : reader.buffer_position(),
 						bs : e,
 						text : last_text.take(),
 						childs : vec![]
-					});
+					};
+					elem = Some(el);
+
+					//ignore end tag
+					if elem.as_ref().unwrap().tag().as_ref() == b"spacer" {
+						break
+					}
 				}
 			}
 			Ok(Event::End(e)) => {
@@ -245,7 +260,9 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 							//check matching tag start and end
 							if v != el.tag().as_ref() {
 								return Err(Error::InvalidCloseTag(src_pos))
-							} else {
+							} 
+							
+							else {
 								el.src_pos_end = reader.buffer_position();
 								el.text = last_text.take();			
 							}

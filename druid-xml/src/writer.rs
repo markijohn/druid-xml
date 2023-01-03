@@ -151,6 +151,7 @@ impl DruidGenerator {
                 } else if let Some(value) = get_style!($name) {
                     src!($start);
                     match $name {
+                        "padding" => CSSAttribute::padding(&mut self.writer, value).unwrap(),
                         "background-color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
                         "color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
                         "font-size" => CSSAttribute::font_size(&mut self.writer, value).unwrap(),
@@ -285,15 +286,30 @@ impl DruidGenerator {
         }
 
         else if tag == "scroll" {
-            src!("let mut scroll = Scroll::new()")
+            if elem.childs.len() != 1 {
+                return Err(Error::InvalidScrollChildNum(elem.src_pos))
+            }
+            let new_stack = new_parent_stack!();
+            src!("let child = {{\n");
+            self.impl_write(&new_stack, &elem.childs[0], css)?;
+            src!("}};\n");
+
+            src!( "let mut container = Container::new(child);\n");
+            style!("container.set_background(", "background-color", ");\n");
+            style!("container.set_border(", "border", ");\n");
+
+            src!("let mut scroll = Scroll::new(child);\n");
         }
 
         else if tag == "slider" {
-
+            let min = attrs.get_as::<f64>("min", elem.src_pos).unwrap_or(0f64);
+            let max = attrs.get_as::<f64>("max", elem.src_pos).unwrap_or(1f64);
+            src!("let mut slider = Slider::with_range({min},{max})");
         }
 
         else if tag == "spinner" {
-
+            src!("let mut spinner = Spinner::new();\n");
+            style!("spinner.set_color(", "color", ");\n");
         }
 
         //TODO : child must be two item
@@ -319,16 +335,23 @@ impl DruidGenerator {
         }
 
         else if tag == "stepper" {
-
+            let min = attrs.get_as::<f64>("min", elem.src_pos).unwrap_or(std::f64::MIN);
+            let max = attrs.get_as::<f64>("max", elem.src_pos).unwrap_or(std::f64::MAX);
+            let step = attrs.get_as::<f64>("step", elem.src_pos).unwrap_or(std::f64::MAX);
+            let wrap = attrs.get_as::<bool>("wraparound", elem.src_pos).unwrap_or(false);
+            src!("let mut stepper = Stepper::with_range({min},{max});\n");
+            src!("stepper = stepper.with_step({step});\n");
+            src!("stepper = stepper.with_wraparound({wrap});\n");
         }
 
         else if tag == "switch" {
-
+            //TODO : style
+            src!("let mut switch = Switch::new();\n");
         }
 
         //TODO
         else if tag == "painter" || tag == "canvas" {
-            
+            tag_wrap = "painter";
         }
 
         //WARN : container is none-standard
@@ -353,6 +376,7 @@ impl DruidGenerator {
         //all component
         //background, padding, 
         {
+            //wrap `SizedBox` with optimize
             if attrs.get(b"width").is_some() && attrs.get(b"height").is_some() {
                 style!("{tag_wrap} = {tag_wrap}.fix_size(" , "width-height", ");\n" );
             } else {
@@ -360,8 +384,14 @@ impl DruidGenerator {
                 style!("{tag_wrap} = {tag_wrap}.fix_height(" , "height", ");\n" );    
             }
             
-            style!("{tag_wrap} = {tag_wrap}.background(" , "background-color", ");\n" );
-            style!("{tag_wrap} = {tag_wrap}.border(" , "border", ");\n" );
+            //wrap 'Container' 
+            if tag != "container" {
+                style!("{tag_wrap} = {tag_wrap}.background(" , "background-color", ");\n" );
+                style!("{tag_wrap} = {tag_wrap}.border(" , "border", ");\n" );
+            }
+
+            //wrap `Padding`
+            style!("{tag_wrap} = {tag_wrap}.padding(" , "padding", ");\n" );
         }
 
         src!("{}\n", tag_wrap ); //return element
@@ -381,6 +411,13 @@ impl SourceGenerator for DruidGenerator {
 struct CSSAttribute;
 
 impl CSSAttribute {
+    fn padding(w:&mut String, v:&str) -> Result<(),Error> {
+        
+        let splits = v.split_whitespace();
+        splits.count();
+        Ok(())
+    }
+
     //TODO : Error check
     /// [O] : rgb(0,255,0)
     /// [O] : rgba(0,255,0,88)
@@ -408,8 +445,8 @@ impl CSSAttribute {
     fn size(w:&mut String, v:&str) -> Result<(), Error> {
         let tv = v.trim();
         match tv.as_bytes() {
-            [val @ .. , b'p', b'x'] => write!(w,"{}", String::from_utf8_lossy(val) ).unwrap(),
-            [val @ .. , b'e', b'm'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
+            [val @ .. , b'p', b'x'] => write!(w,"{}f64", String::from_utf8_lossy(val) ).unwrap(),
+            [val @ .. , b'e', b'm'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
             val @ _ => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
         }
         Ok(())
@@ -419,18 +456,18 @@ impl CSSAttribute {
     fn font_size(w:&mut String, v:&str) -> Result<(),Error> {
         let tv = v.trim();
         match tv.as_bytes() {
-            b"xx-small" => write!(w,"9" ).unwrap(),
-            b"x-small" => write!(w,"10" ).unwrap(),
-            b"small" => write!(w,"13.333" ).unwrap(),
-            b"medium" => write!(w,"16" ).unwrap(),
-            b"large" => write!(w,"18" ).unwrap(),
-            b"x-large" => write!(w,"24" ).unwrap(),
-            b"xx-large" => write!(w,"32" ).unwrap(),
-            [val @ .. , b'p', b'x'] => write!(w,"{}", String::from_utf8_lossy(val) ).unwrap(),
-            [val @ .. , b'e', b'm'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
-            [val @ .. , b'p', b't'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap() ).unwrap() ,
-            [val @ .. , b'%'] => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap() ).unwrap(),
-            val @ _ => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
+            b"xx-small" => write!(w,"9f64" ).unwrap(),
+            b"x-small" => write!(w,"10f64" ).unwrap(),
+            b"small" => write!(w,"13.333f64" ).unwrap(),
+            b"medium" => write!(w,"16f64" ).unwrap(),
+            b"large" => write!(w,"18f64" ).unwrap(),
+            b"x-large" => write!(w,"24f64" ).unwrap(),
+            b"xx-large" => write!(w,"32f64" ).unwrap(),
+            [val @ .. , b'p', b'x'] => write!(w,"{}f64", String::from_utf8_lossy(val) ).unwrap(),
+            [val @ .. , b'e', b'm'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
+            [val @ .. , b'p', b't'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap() ).unwrap() ,
+            [val @ .. , b'%'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap() ).unwrap(),
+            val @ _ => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
         }
         Ok(())
     }
