@@ -146,7 +146,14 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 					},
 					_ => {						
 						if let Some(elem) = parse_element(pos, Some(Event::Start(e)), &mut reader )? {
+							let attrs = elem.attributes();
+							let fn_name = attrs.get_result("fn", elem.src_pos)?;
+							let fn_name = String::from_utf8_lossy( fn_name.as_ref() );
+							let lens = attrs.get_result("lens", elem.src_pos)?;
+							let lens = String::from_utf8_lossy( lens.as_ref() );
+							writer.write_raw(&format!("fn {fn_name}() -> impl Widget<{lens}> {{\n") ).unwrap();
 							writer.write(&elem, &style).unwrap();
+							writer.write_raw("}\n").unwrap();
 						} else {
 							break
 						}
@@ -164,7 +171,7 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 			Ok(Event::PI(_)) => (),
 			Ok(Event::DocType(_)) => (),
 			Ok(Event::Text(_)) => (), //ignore text from root node
-			Ok(Event::End(_)) => return Err(Error::CloseWithoutStart(reader.buffer_position())),
+			Ok(Event::End(_)) => (), //return Err(Error::CloseWithoutStart(reader.buffer_position())),
 		}
 	}
 	Ok( writer.into() )
@@ -209,6 +216,7 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 			src_pos = reader.buffer_position();
 			reader.read_event()
 		};
+		//println!("{:?}", event);
 		match event {
 			Ok(Event::Start(e)) => {
 				//check parentable element
@@ -243,31 +251,17 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 						childs : vec![]
 					};
 					elem = Some(el);
-
-					//ignore end tag
-					if elem.as_ref().unwrap().tag().as_ref() == b"spacer" {
-						break
-					}
 				}
 			}
 			Ok(Event::End(e)) => {
-				//TODO : </input>,</spacer> ignorable
-
 				if let Some(mut el) = elem.as_mut() {
-					match e.name().as_ref() {
-						b"input" | b"spacer" => (), //ignorable
-						v @ _ => {
-							//check matching tag start and end
-							if v != el.tag().as_ref() {
-								return Err(Error::InvalidCloseTag(src_pos))
-							} 
-							
-							else {
-								el.src_pos_end = reader.buffer_position();
-								el.text = last_text.take();			
-							}
-						}
-					}
+					//println!("############ {} {}", String::from_utf8_lossy(e.name().as_ref()), String::from_utf8_lossy(el.tag().as_ref()));
+					//check matching tag start and end
+					if e.name().as_ref() != el.tag().as_ref() {
+						return Err(Error::InvalidCloseTag(src_pos))
+					} 					
+					el.src_pos_end = reader.buffer_position();
+					el.text = last_text.take();			
 				} else {
 					return Err(Error::InvalidCloseTag(src_pos))
 				}
@@ -277,9 +271,52 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 				last_text = Some(t);				
 			}
 			Ok(Event::Comment(_)) => (), //ignore
-			Ok(Event::Empty(_)) => (), //ignore
+			Ok(Event::Empty(e)) => {
+				//like <tag name=value .. />
+
+				//check parentable element
+				if let Some( el) = elem.as_mut() {
+					let tag = el.tag();
+					let tag = tag.as_ref();
+					if tag == b"flex" {
+						//just ok
+					} else if tag == b"split" {
+						//must be two
+						if el.childs.len() == 2 {
+							return Err(Error::InvalidSplitChildNum(el.src_pos))
+						}
+					} else if tag == b"container" || tag == b"scroll" {
+						//must be one
+						if el.childs.len() == 1 {
+							return Err(Error::InvalidContainerChildNum(el.src_pos))
+						}
+					} else {
+						return Err(Error::ChildlessElement(el.src_pos))
+					}
+
+					if let Some(child) = parse_element(src_pos, Some(Event::Empty(e)),reader)? {
+						el.childs.push( child );
+					}
+				} else {
+					let el = Element {
+						src_pos,
+						src_pos_end : reader.buffer_position(),
+						bs : e,
+						text : last_text.take(),
+						childs : vec![]
+					};
+					elem = Some(el);
+
+					//different to `Event::Start`
+					break
+				}
+			}, //ignore
 			Ok(Event::Eof) => {
-				return Err(Error::InvalidCloseTag(src_pos))
+				if elem.is_some() {
+					return Err(Error::InvalidCloseTag(src_pos))
+				} else {
+					break
+				}
 			},
 			Err(e) => return Err(Error::XMLSyntaxError( (src_pos,e) )),
 			_etc@ _ => {
@@ -329,6 +366,25 @@ mod test {
 			</flex>
 		</flex>
 		"#;
+		let result = super::compile( src );
+		match result {
+			Ok(compiled) => println!("{}", compiled),
+			Err(e) => { println!("Error : {:?} : {}", e, &src[e.error_at() .. ])}
+		}
+	}
+
+	#[test]
+	fn test_basic() {
+		let src = r#"
+        <style>
+        flex { background-color:black; }
+        </style>
+
+        <flex fn="build_main" lens="()">
+            <label>HI</label>
+            <button>MyButton</button>
+        </flex>
+        "#;
 		let result = super::compile( src );
 		match result {
 			Ok(compiled) => println!("{}", compiled),

@@ -66,6 +66,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
 }
 
 pub(crate) trait SourceGenerator {
+    fn write_raw(&mut self,code:&str) -> Result<(),Error>;
     fn write(&mut self, elem:&Element, css:&StyleSheet) -> Result<(),Error>;
 }
 
@@ -376,22 +377,22 @@ impl DruidGenerator {
         //all component
         //background, padding, 
         {
+            //wrap `Padding`
+            style!("let {tag_wrap} = {tag_wrap}.padding(" , "padding", ");\n" );
+
             //wrap `SizedBox` with optimize
             if attrs.get(b"width").is_some() && attrs.get(b"height").is_some() {
-                style!("{tag_wrap} = {tag_wrap}.fix_size(" , "width-height", ");\n" );
+                style!("let {tag_wrap} = {tag_wrap}.fix_size(" , "width-height", ");\n" );
             } else {
-                style!("{tag_wrap} = {tag_wrap}.fix_width(" , "width", ");\n" );
-                style!("{tag_wrap} = {tag_wrap}.fix_height(" , "height", ");\n" );    
+                style!("let {tag_wrap} = {tag_wrap}.fix_width(" , "width", ");\n" );
+                style!("let {tag_wrap} = {tag_wrap}.fix_height(" , "height", ");\n" );    
             }
             
             //wrap 'Container' 
             if tag != "container" {
-                style!("{tag_wrap} = {tag_wrap}.background(" , "background-color", ");\n" );
-                style!("{tag_wrap} = {tag_wrap}.border(" , "border", ");\n" );
+                style!("let {tag_wrap} = {tag_wrap}.background(" , "background-color", ");\n" );
+                style!("let {tag_wrap} = {tag_wrap}.border(" , "border", ");\n" );
             }
-
-            //wrap `Padding`
-            style!("{tag_wrap} = {tag_wrap}.padding(" , "padding", ");\n" );
         }
 
         src!("{}\n", tag_wrap ); //return element
@@ -402,6 +403,11 @@ impl DruidGenerator {
 
 
 impl SourceGenerator for DruidGenerator {
+    fn write_raw(&mut self, code:&str) -> Result<(),Error> {
+        self.writer.push_str(code);
+        Ok(())
+    }
+
     fn write(&mut self, elem:&Element, css:&StyleSheet) -> Result<(),Error> {
         self.impl_write(&mut vec![], elem, css)
     }
@@ -412,9 +418,17 @@ struct CSSAttribute;
 
 impl CSSAttribute {
     fn padding(w:&mut String, v:&str) -> Result<(),Error> {
-        
-        let splits = v.split_whitespace();
-        splits.count();
+        let mut splits = v.split_whitespace();
+        let count = splits.clone().count();
+        if count == 1 {
+            Self::size(w, splits.next().unwrap())?
+        } else if count == 2 || count == 4 {
+            write!(w,"(").unwrap();
+            splits.for_each(|e| write!(w,"{},",e).unwrap() );
+            write!(w,")").unwrap();
+        } else {
+            panic!("The number of padding parameters must be one of 1,2,4. but \"{}\"",v);
+        }
         Ok(())
     }
 
@@ -447,7 +461,7 @@ impl CSSAttribute {
         match tv.as_bytes() {
             [val @ .. , b'p', b'x'] => write!(w,"{}f64", String::from_utf8_lossy(val) ).unwrap(),
             [val @ .. , b'e', b'm'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
-            val @ _ => write!(w, "{}", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
+            val @ _ => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
         }
         Ok(())
     }

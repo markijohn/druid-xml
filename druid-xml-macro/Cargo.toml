@@ -10,6 +10,7 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
+druid-xml = {path="../druid-xml"}
 syn = {version="1.0.42", features=["full"]}
 quote = "1.0.7"
 proc-macro2 = "1.0.19"

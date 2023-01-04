@@ -1,5 +1,6 @@
 extern crate proc_macro;
 
+
 use proc_macro::{TokenStream};
 use syn::{parse_macro_input, Result, Token};
 use syn::parse::{Parse, ParseStream};
@@ -11,7 +12,7 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 	struct DruidXML {
 		xml_src : syn::LitStr,
 		sep2 : Option<Token![,]>,
-		maps : Vec<WidgetWrapper>,
+		maps : Option<Vec<WidgetWrapper>>,
 	}
 
 	//like syn::Arm
@@ -45,11 +46,16 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 					break
 				}
 			}
+			let maps = if maps.len() > 0 {
+				Some(maps)
+			} else {
+				None
+			};
 			Ok( DruidXML { xml_src, sep2, maps } )
 		}
 	}
 
 	let druid_xml = parse_macro_input!(input as DruidXML);
-	
-	TokenStream::new()
+	let ui_code = druid_xml::compile(&druid_xml.xml_src.value()).unwrap();
+	ui_code.parse().unwrap()
 }
