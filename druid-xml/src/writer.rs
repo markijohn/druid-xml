@@ -377,6 +377,14 @@ impl DruidGenerator {
         //all component
         //background, padding, 
         {
+            //wrap Lens
+            if depth > 0 {
+                if let Some(lens) = attrs.get(b"lens") {
+                    let lens = String::from_utf8_lossy(&lens);
+                    src!("let {tag_wrap} = {tag_wrap}.lens({lens});\n");
+                }
+            }
+
             //wrap `Padding`
             style!("let {tag_wrap} = {tag_wrap}.padding(" , "padding", ");\n" );
 
