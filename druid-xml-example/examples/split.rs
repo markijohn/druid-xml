@@ -5,18 +5,21 @@ use druid::{AppLauncher, Color, Data, Lens, LocalizedString, RenderContext, Widg
     WindowDesc,
 };
 
-use druid::widget::{MainAxisAlignment, CrossAxisAlignment, Flex, Label, Button, Switch, TextBox, Painter};
+use druid::widget::{MainAxisAlignment, CrossAxisAlignment, Flex, Label, Split, Button, Switch, TextBox, Painter};
+
 
 pub fn main() {
     druid_xml!(
-        r#"        
-        <!-- The top-level element must have a `fn` `lens` element. -->
-        <!-- `fn` is generated function name. -->
-        <!-- `lens` is druid `Lens` type. -->
-        <flex fn="build_main" lens="()">
-            <label>Hello Druid!</label>
-            <button>OK</button>
-        </flex>
+        r#"
+        <style>
+        label {font-size:1.5em}
+        .one { color:yellow }
+        .two { color:blue }
+        </style>
+        <split fn="build_main" style="padding:10px;" lens="()" draggable="true">
+            <label class="one">Split One</label>
+            <label class="two">Split Two</label>
+        </split>
         "#
     );
     
@@ -27,6 +30,6 @@ pub fn main() {
             LocalizedString::new("calc-demo-window-title").with_placeholder("Basic Demo"),
         );
     AppLauncher::with_window(window)
-        .launch( () )
+        .launch( ()  )
         .expect("launch failed");
 }

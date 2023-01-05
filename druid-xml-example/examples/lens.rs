@@ -17,15 +17,16 @@ pub fn main() {
     druid_xml!(
         r#"
         <style>
-        flex { background-color:white; padding:20px; }
+        flex[fn="build_main"] { background-color:white; padding:20px; }
         label { color: blue; }
         #xml_label { color : darkgray; }
         .cls_btn { width:200px; height:50 }
         </style>
 
-        <flex fn="build_main" lens="AppState" direction="column" axis_alignment="end">
-            <label>Lens DEMO</label>
-            <textbox placeholder="Input here..." lens="AppState::text"/>
+        <flex fn="build_main" lens="AppState" direction="column" axis_alignment="center">
+            <label flex="1">Lens DEMO</label>
+            <spacer/>
+            <textbox placeholder="Input here..." flex="1" lens="AppState::text"/>
             <switch lens="AppState::flag"/>
         </flex>
         "#

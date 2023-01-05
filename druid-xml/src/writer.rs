@@ -169,6 +169,19 @@ impl DruidGenerator {
             }
         }
 
+        macro_rules! attr {
+            ($start:literal, $attr:literal, $end:literal) => {
+                attr!(attrs, $start, $attr, $end);
+            };
+            ($target:ident, $start:literal, $attr:literal, $end:literal) => {
+                if let Some(attr) = $target.get($attr) {
+                    src!( $start );
+                    _src!( 0, "{}", String::from_utf8_lossy( &attr ) );
+                    _src!( 0, $end );
+                }
+            }
+        }
+
         macro_rules! new_parent_stack {
             () => {
                 new_parent_stack!( elem )
@@ -231,7 +244,7 @@ impl DruidGenerator {
                     self.impl_write(&new_stack, child, css)?;
                     src!("}};\n");
                     if let Some(flex) =child.attributes().get(b"flex") {
-                        src!("flex.add_flex_child(child, {});\n", String::from_utf8_lossy(&flex));
+                        src!("flex.add_flex_child(child, {}f64);\n", String::from_utf8_lossy(&flex));
                     } else {
                         src!("flex.add_child( child );\n");
                     }
@@ -294,11 +307,6 @@ impl DruidGenerator {
             src!("let child = {{\n");
             self.impl_write(&new_stack, &elem.childs[0], css)?;
             src!("}};\n");
-
-            src!( "let mut container = Container::new(child);\n");
-            style!("container.set_background(", "background-color", ");\n");
-            style!("container.set_border(", "border", ");\n");
-
             src!("let mut scroll = Scroll::new(child);\n");
         }
 
@@ -333,6 +341,31 @@ impl DruidGenerator {
                 src!("let mut split = Split::rows(one, two);\n");
             }
             
+            attr!("split = split.split_point(", b"split_point", "f64);\n");
+            attr!("split = split.min_size(", b"min_size", "f64);\n");
+            attr!("split = split.bar_size(", b"bar_size", "f64);\n");
+            attr!("split = split.min_bar_area(", b"min_bar_area", "f64);\n");
+            attr!("split = split.draggable(", b"draggable", ");\n");
+            attr!("split = split.solid_bar(", b"solid_bar", ");\n");
+
+            // if let Some(v) = attrs.get(b"split_point") {
+            //     src!("split = split.split_pointer({});\n", String::from_utf8_lossy(&v) );
+            // }
+            // if let Some(v) = attrs.get(b"min_size") {
+            //     src!("split = split.min_size({});\n", String::from_utf8_lossy(&v) );
+            // }
+            // if let Some(v) = attrs.get(b"bar_size") {
+            //     src!("split = split.bar_size({});\n", String::from_utf8_lossy(&v) );
+            // }
+            // if let Some(v) = attrs.get(b"min_bar_area") {
+            //     src!("split = split.min_bar_area({});\n", String::from_utf8_lossy(&v) );
+            // }
+            // if let Some(v) = attrs.get(b"draggable") {
+            //     src!("split = split.min_bar_area({});\n", String::from_utf8_lossy(&v) );
+            // }
+            // if let Some(v) = attrs.get(b"solid_bar") {
+            //     src!("split = split.solid_bar({});\n", String::from_utf8_lossy(&v) );
+            // }
         }
 
         else if tag == "stepper" {
