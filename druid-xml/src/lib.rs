@@ -151,7 +151,7 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 							let fn_name = String::from_utf8_lossy( fn_name.as_ref() );
 							let lens = attrs.get_result("lens", elem.src_pos)?;
 							let lens = String::from_utf8_lossy( lens.as_ref() );
-							writer.write_raw(&format!("fn {fn_name}() -> impl Widget<{lens}> {{\n") ).unwrap();
+							writer.write_raw(&format!("fn {fn_name}() -> impl druid::Widget<{lens}> {{\n") ).unwrap();
 							writer.write(&elem, &style).unwrap();
 							writer.write_raw("}\n").unwrap();
 						} else {
