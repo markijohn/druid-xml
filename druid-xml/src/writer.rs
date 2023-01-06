@@ -10,7 +10,7 @@ use crate::named_color;
 use crate::{AttributeGetter, Element, Error};
 
 /// stack[parent .. elem]
-struct ElementQueryWrap<'a> {
+pub(crate) struct ElementQueryWrap<'a> {
 	parent_stack : &'a [&'a Element<'a>],
     elem : &'a Element<'a>
 }

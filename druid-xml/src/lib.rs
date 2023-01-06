@@ -10,6 +10,9 @@ pub mod writer;
 mod named_color;
 use writer::{SourceGenerator, DruidGenerator};
 
+//#[cfg(feature="dynamic")]
+pub mod dynamic;
+
 #[derive(Debug)]
 pub enum Error {
 	///Flex child length at least 1

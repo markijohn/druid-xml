@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 quick-xml = "0.26.0"
 simplecss = "0.2.1"
+druid = {version = "0.7.0"}
+
+[feature]
+dynamic = ["druid"]
