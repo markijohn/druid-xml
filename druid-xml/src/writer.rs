@@ -11,8 +11,8 @@ use crate::{AttributeGetter, Element, Error};
 
 /// stack[parent .. elem]
 pub(crate) struct ElementQueryWrap<'a> {
-	parent_stack : &'a [&'a Element<'a>],
-    elem : &'a Element<'a>
+	pub parent_stack : &'a [&'a Element<'a>],
+    pub elem : &'a Element<'a>
 }
 
 impl <'a> simplecss::Element for ElementQueryWrap<'a> {
@@ -256,7 +256,7 @@ impl DruidGenerator {
         }
 
         //WARN : checkbox is none-standard
-        else if tag == "label" || tag == "button" || tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
+        else if tag == "label" || tag == "button" {
             let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
             src!("let mut label = druid::widget::Label::new(\"{}\");\n", name );
             style!("label.set_text_color(", "color", ");\n");
@@ -265,10 +265,13 @@ impl DruidGenerator {
 
             if tag == "button" {
                 src!("let button = druid::widget::Button::from_label(label);\n");
-            } else if tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
-                tag_wrap = "checkbox";
-                src!("let checkbox = Checkbox::new(label);\n");
             }
+        }
+
+        else if tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
+            //TODO : checkbox has not label like button. color and text_size
+            tag_wrap = "checkbox";
+            src!("let checkbox = Checkbox::new(label);\n");
         }
 
         //TODO : password type?
@@ -314,9 +317,10 @@ impl DruidGenerator {
         }
 
         else if tag == "slider" {
-            let min = attrs.get_as::<f64>("min", elem.src_pos).unwrap_or(0f64);
-            let max = attrs.get_as::<f64>("max", elem.src_pos).unwrap_or(1f64);
-            src!("let mut slider = Slider::with_range({min},{max})");
+            let min = attrs.get_as_result::<f64>("min", elem.src_pos).unwrap_or(0f64);
+            let max = attrs.get_as_result::<f64>("max", elem.src_pos).unwrap_or(1f64);
+            src!("let mut slider = Slider::new;\n");
+            src!("slider = slider.with_range({min},{max});\n");
         }
 
         else if tag == "spinner" {
@@ -372,11 +376,12 @@ impl DruidGenerator {
         }
 
         else if tag == "stepper" {
-            let min = attrs.get_as::<f64>("min", elem.src_pos).unwrap_or(std::f64::MIN);
-            let max = attrs.get_as::<f64>("max", elem.src_pos).unwrap_or(std::f64::MAX);
-            let step = attrs.get_as::<f64>("step", elem.src_pos).unwrap_or(std::f64::MAX);
-            let wrap = attrs.get_as::<bool>("wraparound", elem.src_pos).unwrap_or(false);
-            src!("let mut stepper = druid::widget::Stepper::with_range({min},{max});\n");
+            let min = attrs.get_as_result::<f64>("min", elem.src_pos).unwrap_or(std::f64::MIN);
+            let max = attrs.get_as_result::<f64>("max", elem.src_pos).unwrap_or(std::f64::MAX);
+            let step = attrs.get_as_result::<f64>("step", elem.src_pos).unwrap_or(std::f64::MAX);
+            let wrap = attrs.get_as_result::<bool>("wraparound", elem.src_pos).unwrap_or(false);
+            src!("let mut stepper = Stepper::new();\n");
+            src!("let mut stepper = stepper.with_range({min},{max});\n");
             src!("stepper = stepper.with_step({step});\n");
             src!("stepper = stepper.with_wraparound({wrap});\n");
         }
@@ -535,7 +540,7 @@ impl CSSAttribute {
             "left" => write!(w, "druid::TextAlignment::Start").unwrap(),
             "right" => write!(w, "druid::TextAlignment::End").unwrap(),
             "center" => write!(w, "druid::TextAlignment::Center").unwrap(),
-            "justify" => write!(w, "druid::TextAlignment::Justify").unwrap(),
+            "justify" => write!(w, "druid::TextAlignment::Justified").unwrap(),
             _ => return Err( Error::InvalidAttributeValue((0,"text-align")) )
         }
         Ok(())

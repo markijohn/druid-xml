@@ -1,6 +1,15 @@
 use druid::Color;
 
-pub(crate) fn to_color(name:&str, default:Color) -> Color {
+pub(crate) fn to_color(name:&str, default:Option<Color>) -> Color {
+    let default = default.unwrap_or( Color::rgb8(0,0,0) );
+    let tv = name.trim();
+    if tv.starts_with("rgb") && tv.ends_with(')') {
+        let mut splits = tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()].split(',');
+        return Color::rgb8(splits.next().unwrap().parse::<u8>().unwrap(), splits.next().unwrap().parse::<u8>().unwrap(), splits.next().unwrap().parse::<u8>().unwrap() );
+    } else if tv.starts_with("rgba") && tv.ends_with(')') {
+        let mut splits = tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()].split(',');
+        return Color::rgba8(splits.next().unwrap().parse::<u8>().unwrap(), splits.next().unwrap().parse::<u8>().unwrap(), splits.next().unwrap().parse::<u8>().unwrap(), splits.next().unwrap().parse::<u8>().unwrap() );
+    }
     match name {
         "lightsalmon"          => Color::rgb8(255,160,122),// #FFA07A	
         "salmon"               => Color::rgb8(250,128,114),// #FA8072	
@@ -30,7 +39,7 @@ pub(crate) fn to_color(name:&str, default:Color) -> Color {
         "lawngreen"            => Color::rgb8(124,252,0),  //	#7CFC00	
         "chartreuse"           => Color::rgb8(127,255,0),  //	#7FFF00	
         "limegreen"            => Color::rgb8(50,205,50),  //	#32CD32	
-        "lime"                 => Color::rgb8(0.255.0),    //	#00FF00	
+        "lime"                 => Color::rgb8(0,255,0),    //	#00FF00	
         "forestgreen"          => Color::rgb8(34,139,34),  //	#228B22	
         "green"                => Color::rgb8(0,128,0),    //	#008000	
         "darkgreen"            => Color::rgb8(0,100,0),    //	#006400	
@@ -143,15 +152,15 @@ pub(crate) fn to_color(name:&str, default:Color) -> Color {
         "maroon"               => Color::rgb8(128,0,0),    //	#800000	
         _ => {
             if tv.starts_with('#') {
-                Color::from_hex_str(tv)
+                Color::from_hex_str(tv).unwrap_or( default )
             } else if tv.starts_with("rgb") && tv.ends_with(')') {
-                let params = &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()].split(',');
-                Color::rgb8(params.next().parse::<u8>().unwrap(), params.next().parse::<u8>().unwrap(), params.next().parse::<u8>().unwrap());
+                let mut params = tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()].split(',');
+                Color::rgb8(params.next().unwrap().parse::<u8>().unwrap(), params.next().unwrap().parse::<u8>().unwrap(), params.next().unwrap().parse::<u8>().unwrap())
             } else if tv.starts_with("rgba") && tv.ends_with(')') {
-                let params = &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()].split(',');
-                Color::rgba8(params.next().parse::<u8>().unwrap(), params.next().parse::<u8>().unwrap(), params.next().parse::<u8>().unwrap(), params.next().parse::<u8>().unwrap());
+                let mut params = tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()].split(',');
+                Color::rgba8(params.next().unwrap().parse::<u8>().unwrap(), params.next().unwrap().parse::<u8>().unwrap(), params.next().unwrap().parse::<u8>().unwrap(), params.next().unwrap().parse::<u8>().unwrap())
             } else {
-                Color::black
+                default
             }
         }
     }

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::marker::PhantomData;
 
 use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
@@ -10,9 +11,34 @@ pub mod writer;
 mod named_color;
 use writer::{SourceGenerator, DruidGenerator};
 
+
+#[derive(Default)]
+struct DummyLens<T,A> {
+    o : PhantomData<T>,
+    a : A
+}
+
+impl <T,A> DummyLens<T,A> {
+    fn new(a : A) -> Self {
+        Self { o : PhantomData, a : a }
+    }
+}
+
+impl <T:druid::Data,U> druid::Lens<T, U> for DummyLens<T,U> {
+    fn with<V, F: FnOnce(&U) -> V>(&self, data: &T, f: F) -> V {
+        f(&self.a)
+    }
+
+    fn with_mut<V, F: FnOnce(&mut U) -> V>(&self, data: &mut T, f: F) -> V {
+        #[allow(mutable_transmutes)]
+        f( unsafe { std::mem::transmute::<&U,&mut U>(&self.a) } )
+    }
+}
+
 //#[cfg(feature="dynamic")]
 pub mod dynamic;
 
+#[cfg_attr(taret_arch="wasm32", wasm_bindgen)]
 #[derive(Debug)]
 pub enum Error {
 	///Flex child length at least 1
@@ -107,7 +133,16 @@ pub(crate) trait AttributeGetter {
 		.ok_or( Error::AttributeRequired((pos, name)) )
 	}
 
-	fn get_as<T: std::str::FromStr>(&self, name:&'static str, pos:usize) -> Result<T, Error> {
+	fn get_as<T: std::str::FromStr>(&self, name:&[u8]) -> Option<T> {
+		if let Some(e) = self.get(name) {
+			if let Ok(v) = String::from_utf8_lossy(&e).parse::<T>() {
+				return Some(v)
+			}
+		}
+		None
+	}
+
+	fn get_as_result<T: std::str::FromStr>(&self, name:&'static str, pos:usize) -> Result<T, Error> {
 		let e = self.get_result(name, pos)?;
 		match String::from_utf8_lossy(&e).parse::<T>() {
 			Ok(e) => Ok(e),
@@ -329,6 +364,25 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 	}
 	
 	Ok( elem )
+}
+
+#[cfg(target_arch="wasm32")]
+use wasm_bindgen::prelude::*;
+
+
+#[cfg(target_arch="wasm32")]
+#[cfg_attr(target_arch="wasm32", wasm_bindgen)]
+pub fn show_preview(src:&str) {
+	use druid::{WindowDesc, LocalizedString, AppLauncher, Data, Lens};
+	let window = WindowDesc::new(build_main)
+	.window_size((223., 300.))
+	.resizable(false)
+	.title(
+		LocalizedString::new("basic-demo").with_placeholder("Basic Demo"),
+	);
+	AppLauncher::with_window(window)
+	.launch( () )
+	.expect("launch failed");
 }
 
 
