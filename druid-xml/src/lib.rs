@@ -62,8 +62,14 @@ pub enum Error {
 	///Required attribute not exist
 	AttributeRequired( (usize, &'static str)),
 
-	///Invalid attribute value
+	//invalid attribute value
 	InvalidAttributeValue( (usize, &'static str) ),
+
+	///Invalid size(width,height) value
+	InvalidSizeAttributeValue( usize ),
+
+	///Invalid border value
+	InvalidBorderAttributeValue( usize ),
 
 	///That element can't have child
 	ChildlessElement( usize ),
@@ -91,7 +97,9 @@ impl Error {
 			Error::CloseWithoutStart( s ) => *s,
 			Error::InvalidCloseTag(s) => *s,
 			Error::AttributeRequired( (s, _)) => *s,
-			Error::InvalidAttributeValue( (s, _) ) => *s,
+			Error::InvalidAttributeValue( (s,_) ) => *s,
+			Error::InvalidSizeAttributeValue( s ) => *s,
+			Error::InvalidBorderAttributeValue( s ) => *s,
 			Error::ChildlessElement(s) => *s,
 			Error::UnknownAttribute(s) => *s,
 			Error::InvalidTopElement(s) => *s,
@@ -117,20 +125,25 @@ impl <'a> Element<'a> {
 		self.bs.name()
 	}
 
-	pub fn attributes(&'a self) -> Attributes<'a> {
-		self.bs.attributes()
+	pub fn attributes(&'a self) -> AttributesWrapper<'a> {
+		AttributesWrapper { pos:self.src_pos, attrs:self.bs.attributes() }
 	}
 }
 
-
+pub struct AttributesWrapper<'a> {
+	pos : usize,
+	attrs : Attributes<'a>
+}
 
 pub(crate) trait AttributeGetter {
 	fn get(&self, name:&[u8]) -> Option<Cow<[u8]>>;
+
+	fn pos(&self) -> usize;
 	
-	fn get_result(&self, name:&'static str, pos:usize) -> Result<Cow<[u8]>,Error> {
+	fn get_result(&self, name:&'static str) -> Result<Cow<[u8]>,Error> {
 		let nameb = name.as_bytes();
 		self.get(nameb)
-		.ok_or( Error::AttributeRequired((pos, name)) )
+		.ok_or( Error::AttributeRequired((self.pos(), name)) )
 	}
 
 	fn get_as<T: std::str::FromStr>(&self, name:&[u8]) -> Option<T> {
@@ -142,24 +155,38 @@ pub(crate) trait AttributeGetter {
 		None
 	}
 
-	fn get_as_result<T: std::str::FromStr>(&self, name:&'static str, pos:usize) -> Result<T, Error> {
-		let e = self.get_result(name, pos)?;
+	fn get_as_result<T: std::str::FromStr>(&self, name:&'static str) -> Result<T, Error> {
+		let e = self.get_result(name)?;
 		match String::from_utf8_lossy(&e).parse::<T>() {
 			Ok(e) => Ok(e),
-			Err(e) => Err(Error::InvalidAttributeValue( (pos,name) ))
+			Err(e) => Err(Error::InvalidAttributeValue( (self.pos(),name) ))
+		}
+	}
+
+	fn get_size(&self, name:&'static str) -> Result<f64, Error> {
+		let e = self.get_result(name)?;
+		let se = String::from_utf8_lossy(&e);
+		if se.as_ref().ends_with("px") {
+			se[..se.len()-2].parse::<f64>().map_err( |_| Error::InvalidAttributeValue( (self.pos(),name) ) )
+		} else {
+			se.parse::<f64>().map_err( |_| Error::InvalidAttributeValue( (self.pos(),name) ) )
 		}
 	}
 }
 
-impl <'a> AttributeGetter for Attributes<'a> {
+impl <'a> AttributeGetter for AttributesWrapper<'a> {
     fn get(&self, name:&[u8]) -> Option<Cow<'a, [u8]>> {
-        self.clone()
+        self.attrs.clone()
 		.find( |e| 
 			e.is_ok() && e.as_ref().unwrap().key.as_ref() == name
 		).map( |e|  {
 			e.unwrap().value
 		})
     }
+
+	fn pos(&self) -> usize {
+		self.pos
+	}
 }
 
 
@@ -185,9 +212,9 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 					_ => {						
 						if let Some(elem) = parse_element(pos, Some(Event::Start(e)), &mut reader )? {
 							let attrs = elem.attributes();
-							let fn_name = attrs.get_result("fn", elem.src_pos)?;
+							let fn_name = attrs.get_result("fn")?;
 							let fn_name = String::from_utf8_lossy( fn_name.as_ref() );
-							let lens = attrs.get_result("lens", elem.src_pos)?;
+							let lens = attrs.get_result("lens")?;
 							let lens = String::from_utf8_lossy( lens.as_ref() );
 							writer.write_raw(&format!("fn {fn_name}() -> impl druid::Widget<{lens}> {{\n") ).unwrap();
 							writer.write(&elem, &style).unwrap();
@@ -369,12 +396,120 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch="wasm32")]
+#[cfg_attr(target_arch="wasm32", wasm_bindgen)]
+extern {
+	pub fn get_xml_src() -> String;
+
+	pub fn xml_error(cause:&str, codeat:usize, ext:&str);
+
+	#[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
 
 #[cfg(target_arch="wasm32")]
 #[cfg_attr(target_arch="wasm32", wasm_bindgen)]
-pub fn show_preview(src:&str) {
-	use druid::{WindowDesc, LocalizedString, AppLauncher, Data, Lens};
-	let window = WindowDesc::new(build_main)
+pub fn show_preview(src:String) {
+	use druid::{WindowDesc, LocalizedString, TimerToken, AppLauncher, Event, Widget, Data, Lens, EventCtx, LayoutCtx, UpdateCtx, LifeCycle, LifeCycleCtx, PaintCtx, Env, Size, BoxConstraints};
+
+	std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
+	struct DynWidget {
+		timer_id: TimerToken,
+		child : Option< Box<dyn Widget<()>> >
+	}
+
+	impl Widget<()> for DynWidget {
+		fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut (), env: &Env) {
+			match event {
+				Event::WindowConnected => {
+					self.timer_id = ctx.request_timer( std::time::Duration::from_millis(200) );
+				},
+				Event::Timer(id) => {
+					if *id == self.timer_id {
+						let src = get_xml_src();
+						if !src.is_empty() {
+							match dynamic::generate_widget( &src ) {
+								Ok(map) => {
+									for (name,w) in map.into_iter() {
+										if name.find("main").is_some() {
+											self.child = Some( w );
+											xml_error("",0,"");
+											ctx.children_changed();
+											break
+										}
+									}
+								},
+								Err(e) => {
+									match e {
+										Error::InvalidFlexChildNum( s ) => xml_error("InvalidFlexChildNum", s, ""),
+										Error::InvalidSplitChildNum( s ) => xml_error("InvalidSplitChildNum", s, ""),
+										Error::InvalidContainerChildNum( s ) => xml_error("InvalidContainerChildNum", s, ""),
+										Error::InvalidScrollChildNum( s ) => xml_error("InvalidScrollChildNum", s, ""),
+										Error::CloseWithoutStart( s ) => xml_error("CloseWithoutStart", s, ""),
+										Error::InvalidCloseTag(s) => xml_error("InvalidCloseTag", s, ""),
+										Error::AttributeRequired( (s, n)) => xml_error("AttributeRequired", s, n),
+										Error::InvalidAttributeValue( (s, n) ) => xml_error("InvalidAttributeValue", s, n),
+										Error::InvalidSizeAttributeValue( s ) => xml_error("InvalidSizeAttributeValue", s, ""),
+										Error::InvalidBorderAttributeValue( s ) => xml_error("InvalidBorderAttributeValue", s, ""),
+										Error::ChildlessElement(s) => xml_error("ChildlessElement", s, ""),
+										Error::UnknownAttribute(s) => xml_error("UnknownAttribute", s, ""),
+										Error::InvalidTopElement(s) => xml_error("InvalidTopElement", s, ""),
+										Error::CSSSyntaxError( (s, e) ) => xml_error("CSSSyntaxError", s, &format!("{:?}",e) ),
+										Error::XMLSyntaxError( (s, e) ) => xml_error("XMLSyntaxError", s, &format!("{:?}",e) ),
+									}
+								}
+							}
+						}
+						self.timer_id = ctx.request_timer( std::time::Duration::from_millis(200) );
+					}
+				}
+				_ => (),
+			}
+
+			if let Some(child) = self.child.as_mut() {
+				child.event(ctx, event, data, env);
+			}
+		}
+	
+		fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &(), env: &Env) {
+			if let Some(child) = self.child.as_mut() {
+				child.lifecycle(ctx, event, data, env)
+			}
+		}
+	
+		fn update(&mut self, ctx: &mut UpdateCtx, _old_data: &(), data: &(), env: &Env) {
+			if let Some(child) = self.child.as_mut() {
+				child.update(ctx, _old_data, data, env);
+			}
+		}
+	
+		fn layout(
+			&mut self,
+			ctx: &mut LayoutCtx,
+			bc: &BoxConstraints,
+			data: &(),
+			env: &Env,
+		) -> Size {
+			if let Some(child) = self.child.as_mut() {
+				child.layout(ctx, bc, data, env)
+			} else {
+				bc.constrain((100.0, 100.0))
+			}
+		}
+	
+		fn paint(&mut self, ctx: &mut PaintCtx, data: &(), env: &Env) {
+			if let Some(child) = self.child.as_mut() {
+				child.paint(ctx, data, env);
+			}
+		}
+	}
+
+	fn build_main() -> Box<dyn Widget<()>> {
+		Box::new( DynWidget {timer_id:TimerToken::INVALID, child:None} )
+	}
+
+	let window = WindowDesc::new( build_main )
 	.window_size((223., 300.))
 	.resizable(false)
 	.title(

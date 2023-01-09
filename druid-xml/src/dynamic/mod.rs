@@ -34,7 +34,7 @@ pub fn generate_widget(xml:&str) -> Result< HashMap<String,Box<dyn Widget<()>>>,
 					_ => {						
 						if let Some(elem) = crate::parse_element(pos, Some(Event::Start(e)), &mut reader )? {
                             let widget = build_widget(&[], &elem, &style)?;
-                            map.insert(elem.attributes().get_as_result::<String>("fn", elem.src_pos)?, widget );
+                            map.insert(elem.attributes().get_as_result::<String>("fn")?, widget );
 						} else {
 							break
 						}
@@ -95,6 +95,8 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
         }
     }
 
+    
+
     macro_rules! style {
         ( $widget:ident, "width-height" ) => {
             if let (Some(width), Some(height)) = (get_style!("width") , get_style!("height")) {
@@ -105,14 +107,28 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
         };
         ( $widget:ident, "width" ) => {
             if let Some(v) = get_style!("width") {
-                $widget.fix_width( v.parse<f64>().unwrap() )
+                if v.ends_with("px") {
+                    v = &v[ .. v.len()-2];
+                }
+                if let Ok(v) = v.parse::<f64>() {
+                    $widget.fix_width(v)
+                } else {
+                    $widget
+                }
             } else {
                 $widget
             }
         };
         ( $widget:ident, "height" ) => {
             if let Some(v) = get_style!("height") {
-                $widget.fix_height( v.parse<f64>().unwrap() )
+                if v.ends_with("px") {
+                    v = &v[ .. v.len()-2];
+                }
+                if let Ok(v) = v.parse::<f64>() {
+                    $widget.fix_height(v)
+                } else {
+                    $widget
+                }
             } else {
                 $widget
             }
@@ -122,11 +138,11 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
                 let mut splits = v.split_whitespace();
                 let count = splits.clone().count();
                 if count == 1 {
-                    $widget.padding( splits.next().unwrap().parse::<f64>().unwrap() )
+                    $widget.padding( splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64) )
                 } else if count == 2 || count == 4 {
-                    $widget.padding( (splits.next().unwrap().parse::<f64>().unwrap(),splits.next().unwrap().parse::<f64>().unwrap()) )
+                    $widget.padding( (splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64)) )
                 } else if count ==4 {
-                    $widget.padding( (splits.next().unwrap().parse::<f64>().unwrap(),splits.next().unwrap().parse::<f64>().unwrap(),splits.next().unwrap().parse::<f64>().unwrap(),splits.next().unwrap().parse::<f64>().unwrap()) )
+                    $widget.padding( (splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64)) )
                 } else {
                     panic!("The number of padding parameters must be one of 1,2,4. but \"{}\"",v);
                 }
@@ -140,17 +156,32 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
         };
         ( $widget:ident, "font-size" ) => {
             if let Some(value) = get_style!("font-size") {
-                $widget.set_text_size( value.parse::<f64>().unwrap() )
+                let tv = value.trim();
+                let font_size = match tv.as_bytes() {
+                    b"xx-small" => 9f64,
+                    b"x-small" => 10f64,
+                    b"small" => 13.333f64,
+                    b"medium" => 16f64,
+                    b"large" => 18f64,
+                    b"x-large" => 24f64,
+                    b"xx-large" => 32f64,
+                    [val @ .. , b'p', b'x'] => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64),
+                    [val @ .. , b'e', b'm'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap(),
+                    [val @ .. , b'p', b't'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap(),
+                    [val @ .. , b'%'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap(),
+                    val @ _ => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
+                };
+                $widget.set_text_size( font_size )
             }
         };
         ( $widget:ident, "border" ) => {
             if let Some(v) = get_style!("border") {
                 let mut splited = v.split_whitespace();
-                let width = splited.next().map( |v| v[..v.find("px").unwrap_or(v.len())].parse::<f64>().unwrap() ).unwrap_or(1f64);
+                let width = splited.next().map( |v| v[..v.find("px").unwrap_or(v.len())].parse::<f64>().unwrap_or(1f) ).unwrap_or(1f64);
                 //TODO : support other border style?
                 let _border_style = splited.next().unwrap_or("solid");
                 if _border_style != "solid" {
-                    Err(Error::InvalidAttributeValue((0,"border")))
+                    Err(Error::InvalidAttributeValue((attrs.pos(),"border")))
                 } else {
                     let color = splited.next().unwrap_or("black");
                     $widget.border( width, color::to_color(color) )
@@ -237,7 +268,7 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
             druid::widget::Flex::row()
         };
         if elem.childs.len() < 1 {
-            return Err(Error::InvalidFlexChildNum((elem.src_pos)))
+            return Err(Error::InvalidFlexChildNum(elem.src_pos))
         }
 
         if let Some(v) = attrs.get(b"must_fill_main_axis") {
@@ -275,7 +306,7 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
         for child in elem.childs.iter() {
             if child.tag().as_ref() == b"spacer" {
                 if let Some(v) = child.attributes().get(b"flex") {
-                    flex.add_flex_spacer( String::from_utf8_lossy(&v).parse::<f64>().unwrap() );
+                    flex.add_flex_spacer( String::from_utf8_lossy(&v).parse::<f64>().unwrap_or(1f64) );
                 } else {
                     flex.add_default_spacer( );
                 }
@@ -356,8 +387,8 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
     }
 
     else if tag == "slider" {
-        let min = attrs.get_as_result::<f64>("min", elem.src_pos).unwrap_or(0f64);
-        let max = attrs.get_as_result::<f64>("max", elem.src_pos).unwrap_or(1f64);
+        let min = attrs.get_as_result::<f64>("min").unwrap_or(0f64);
+        let max = attrs.get_as_result::<f64>("max").unwrap_or(1f64);
         let mut slider = Slider::new();
         slider.with_range(min,max).lens( DummyLens::<(),f64>::new(0f64) ).boxed()
     }
@@ -386,34 +417,34 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
         };
         
         if let Some(v) = attrs.get(b"split_point") {
-            split = split.split_point( String::from_utf8_lossy(&v).parse::<f64>().unwrap() );
+            split = split.split_point( String::from_utf8_lossy(&v).parse::<f64>().unwrap_or(0.5) );
         }
         if let Some(v) = attrs.get(b"min_size") {
             let v = String::from_utf8_lossy(&v);
             let mut splits = v.split(',');
-            split = split.min_size( splits.next().unwrap().parse::<f64>().unwrap(),splits.next().unwrap().parse::<f64>().unwrap() );
+            split = split.min_size( splits.next().unwrap_or("0.0").parse::<f64>().unwrap_or(0.0), splits.next().unwrap_or("0.0").parse::<f64>().unwrap_or(0.0) );
         }
         if let Some(v) = attrs.get(b"bar_size") {
-            split = split.bar_size( String::from_utf8_lossy(&v).parse::<f64>().unwrap() );
+            split = split.bar_size( String::from_utf8_lossy(&v).parse::<f64>().unwrap_or(6.0) );
         }
         if let Some(v) = attrs.get(b"min_bar_area") {
-            split = split.min_bar_area( String::from_utf8_lossy(&v).parse::<f64>().unwrap() );
+            split = split.min_bar_area( String::from_utf8_lossy(&v).parse::<f64>().unwrap_or(6.0) );
         }
         if let Some(v) = attrs.get(b"draggable") {
-            split = split.draggable( String::from_utf8_lossy(&v).parse::<bool>().unwrap() );
+            split = split.draggable( String::from_utf8_lossy(&v).parse::<bool>().unwrap_or(false) );
         }
         if let Some(v) = attrs.get(b"solid_bar") {
-            split = split.solid_bar( String::from_utf8_lossy(&v).parse::<bool>().unwrap() );
+            split = split.solid_bar( String::from_utf8_lossy(&v).parse::<bool>().unwrap_or(true) );
         }
 
         split.boxed()
     }
 
     else if tag == "stepper" {
-        let min = attrs.get_as_result::<f64>("min", elem.src_pos).unwrap_or(std::f64::MIN);
-        let max = attrs.get_as_result::<f64>("max", elem.src_pos).unwrap_or(std::f64::MAX);
-        let step = attrs.get_as_result::<f64>("step", elem.src_pos).unwrap_or(std::f64::MAX);
-        let wrap = attrs.get_as_result::<bool>("wraparound", elem.src_pos).unwrap_or(false);
+        let min = attrs.get_as_result::<f64>("min").unwrap_or(std::f64::MIN);
+        let max = attrs.get_as_result::<f64>("max").unwrap_or(std::f64::MAX);
+        let step = attrs.get_as_result::<f64>("step").unwrap_or(std::f64::MAX);
+        let wrap = attrs.get_as_result::<bool>("wraparound").unwrap_or(false);
         let mut stepper = Stepper::new();
         stepper = stepper.with_range(min,max);
         stepper = stepper.with_step(step);
@@ -458,24 +489,25 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
             let mut splits = padding.split_whitespace();
             let count = splits.clone().count();
             if count == 1 {
-                child = child.padding( splits.next().unwrap().parse::<f64>().unwrap() ).boxed();
+                child = child.padding( splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0) ).boxed();
             } else if count == 2 {
-                child = child.padding( (splits.next().unwrap().parse::<f64>().unwrap(), splits.next().unwrap().parse::<f64>().unwrap()) ).boxed();
+                child = child.padding( (splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0)) ).boxed();
             } else if count == 4 {
-                child = child.padding( (splits.next().unwrap().parse::<f64>().unwrap(), splits.next().unwrap().parse::<f64>().unwrap(), splits.next().unwrap().parse::<f64>().unwrap(), splits.next().unwrap().parse::<f64>().unwrap()) ).boxed();
+                child = child.padding( (splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0)) ).boxed();
             } else {
-                panic!("The number of padding parameters must be one of 1,2,4. but \"{}\"",count);
+                //panic!("The number of padding parameters must be one of 1,2,4. but \"{}\"",count);
+                return Err(Error::InvalidAttributeValue( (attrs.pos(),"padding") ) )
             }
         }
 
         //wrap `SizedBox` with optimize
         if attrs.get(b"width").is_some() && attrs.get(b"height").is_some() {
-            child = child.fix_size(attrs.get_as_result::<f64>("width", elem.src_pos)?, attrs.get_as_result::<f64>("height", elem.src_pos)? ).boxed();
+            child = child.fix_size(attrs.get_size("width")?, attrs.get_size("height")? ).boxed();
         } else {
-            if let Ok(width) = attrs.get_as_result::<f64>("width", elem.src_pos) {
+            if let Ok(width) = attrs.get_size("width") {
                 child = child.fix_width(width).boxed();
             }
-            if let Ok(height) = attrs.get_as_result::<f64>("height", elem.src_pos) {
+            if let Ok(height) = attrs.get_size("height") {
                 child = child.fix_height(height).boxed();
             }
         }
@@ -493,7 +525,7 @@ fn build_widget(parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Res
                 //TODO : support other border style?
                 let _border_style = splited.next().unwrap_or("solid");
                 if _border_style != "solid" {
-                    return Err(Error::InvalidAttributeValue((0,"border")))
+                    return Err(Error::InvalidBorderAttributeValue(attrs.pos()))
                 } else {
                     let color = color::to_color(splited.next().unwrap_or("black"), None);
                     child = child.border(color, width).boxed()

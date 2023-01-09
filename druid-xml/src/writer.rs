@@ -287,7 +287,7 @@ impl DruidGenerator {
         //WARN : "image" is none-standard
         else if tag == "image" || tag == "img" {
             tag_wrap = "image";
-            let file_src_holder = &attrs.get_result("src", 0)?;
+            let file_src_holder = &attrs.get_result("src")?;
             let file_src = String::from_utf8_lossy( file_src_holder );
             //TODO : more speedup as raw binary data
             src!( "let image_buf = druid::ImageBuf::from_bytes( inclue_bytes!(\"{}\") ).unwrap();\n", &file_src);
@@ -317,8 +317,8 @@ impl DruidGenerator {
         }
 
         else if tag == "slider" {
-            let min = attrs.get_as_result::<f64>("min", elem.src_pos).unwrap_or(0f64);
-            let max = attrs.get_as_result::<f64>("max", elem.src_pos).unwrap_or(1f64);
+            let min = attrs.get_as_result::<f64>("min").unwrap_or(0f64);
+            let max = attrs.get_as_result::<f64>("max").unwrap_or(1f64);
             src!("let mut slider = Slider::new;\n");
             src!("slider = slider.with_range({min},{max});\n");
         }
@@ -376,10 +376,10 @@ impl DruidGenerator {
         }
 
         else if tag == "stepper" {
-            let min = attrs.get_as_result::<f64>("min", elem.src_pos).unwrap_or(std::f64::MIN);
-            let max = attrs.get_as_result::<f64>("max", elem.src_pos).unwrap_or(std::f64::MAX);
-            let step = attrs.get_as_result::<f64>("step", elem.src_pos).unwrap_or(std::f64::MAX);
-            let wrap = attrs.get_as_result::<bool>("wraparound", elem.src_pos).unwrap_or(false);
+            let min = attrs.get_as_result::<f64>("min").unwrap_or(std::f64::MIN);
+            let max = attrs.get_as_result::<f64>("max").unwrap_or(std::f64::MAX);
+            let step = attrs.get_as_result::<f64>("step").unwrap_or(std::f64::MAX);
+            let wrap = attrs.get_as_result::<bool>("wraparound").unwrap_or(false);
             src!("let mut stepper = Stepper::new();\n");
             src!("let mut stepper = stepper.with_range({min},{max});\n");
             src!("stepper = stepper.with_step({step});\n");
