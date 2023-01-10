@@ -71,6 +71,9 @@ pub enum Error {
 	///Invalid border value
 	InvalidBorderAttributeValue( usize ),
 
+	///
+	CustomWidgetNotExist( (usize, String) ),
+
 	///That element can't have child
 	ChildlessElement( usize ),
 
@@ -100,6 +103,7 @@ impl Error {
 			Error::InvalidAttributeValue( (s,_) ) => *s,
 			Error::InvalidSizeAttributeValue( s ) => *s,
 			Error::InvalidBorderAttributeValue( s ) => *s,
+			Error::CustomWidgetNotExist( (s,_) ) => *s,
 			Error::ChildlessElement(s) => *s,
 			Error::UnknownAttribute(s) => *s,
 			Error::InvalidTopElement(s) => *s,
@@ -430,15 +434,10 @@ pub fn show_preview(src:String) {
 						let src = get_xml_src();
 						if !src.is_empty() {
 							match dynamic::generate_widget( &src ) {
-								Ok(map) => {
-									for (name,w) in map.into_iter() {
-										if name.find("main").is_some() {
-											self.child = Some( w );
-											xml_error("",0,"");
-											ctx.children_changed();
-											break
-										}
-									}
+								Ok(widget) => {
+									self.child = Some( widget );
+									xml_error("",0,"");
+									ctx.children_changed();
 								},
 								Err(e) => {
 									match e {
@@ -452,6 +451,7 @@ pub fn show_preview(src:String) {
 										Error::InvalidAttributeValue( (s, n) ) => xml_error("InvalidAttributeValue", s, n),
 										Error::InvalidSizeAttributeValue( s ) => xml_error("InvalidSizeAttributeValue", s, ""),
 										Error::InvalidBorderAttributeValue( s ) => xml_error("InvalidBorderAttributeValue", s, ""),
+										Error::CustomWidgetNotExist( (s,name) ) => xml_error("InvalidBorderAttributeValue", s, &name),
 										Error::ChildlessElement(s) => xml_error("ChildlessElement", s, ""),
 										Error::UnknownAttribute(s) => xml_error("UnknownAttribute", s, ""),
 										Error::InvalidTopElement(s) => xml_error("InvalidTopElement", s, ""),
@@ -568,14 +568,10 @@ mod test {
 	#[test]
 	fn test_basic() {
 		let src = r#"
-        <style>
-        flex { background-color:black; }
-        </style>
-
-        <flex fn="build_main" lens="()">
-            <label>HI</label>
-            <button>MyButton</button>
-        </flex>
+		<flex fn="build_main" lens="()">
+			<label>Hello Druid!</label>
+			<button>OK</button>
+		</flex>
         "#;
 		let result = super::compile( src );
 		match result {
@@ -584,7 +580,7 @@ mod test {
 		}
 	}
 
-	//#[test]
+	#[test]
 	fn stylesheet() {
 		//css order
 		//1. !important
@@ -608,5 +604,14 @@ mod test {
 
 		css.parse_more(css2);
 		println!("\n\ntwo : {:#?}", css);
+
+		let mut css = simplecss::StyleSheet::parse(r#"
+		label { color:black; font-size:16px }
+		.my_label { color:yellow; font-size:1.6em }
+		#my_special_label { color:cyan; font-soze:24px }
+		"#);
+		for rule in css.rules {
+			println!("{} : {:?}", rule.selector.to_string(), rule.selector.specificity());
+		}
 	}
 }

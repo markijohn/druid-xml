@@ -99,10 +99,19 @@ impl DruidGenerator {
         //Reference : https://www.w3.org/TR/selectors/#specificity
         let css_iter = 
         css.rules.iter()
-        .filter( |e| e.selector.specificity()[0] == 1 && e.selector.matches(&elem_query) )
+
+        //id first
+        .filter( |e| { let spec = e.selector.specificity(); spec[0] > 0 && e.selector.matches(&elem_query) } )
+    
+        //class 
         .chain(
             css.rules.iter()
-            .filter( |e| e.selector.specificity()[0] != 1 && e.selector.matches(&elem_query) ) )
+            .filter( |e| { let spec = e.selector.specificity(); spec[0] == 0 && spec[1] > 0 && e.selector.matches(&elem_query) } ) )
+    
+        //global types
+        .chain(
+            css.rules.iter()
+            .filter( |e| { let spec = e.selector.specificity(); spec[0] == 0 && spec[1] == 0 && spec[2] > 0 && e.selector.matches(&elem_query) } ) )
         .map( |e| &e.declarations );
 
         let tag_qname = elem.tag();

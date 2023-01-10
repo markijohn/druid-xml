@@ -15,22 +15,22 @@ pub struct QWidget {
     //childs
 }
 
-pub struct QueryResult {
-    
+pub struct QueryChain {
+    //queried : Vec<&'a QWidget>
 }
 
-impl QueryResult {
-    pub fn q(q:Into<Query>) -> QueryResult {
+impl QueryChain {
+    pub fn q(q:Into<Query>) -> QueryChain {
         todo!()
     }
 }
 
 impl QWidget {
-    pub fn q(&self, q:Into<Query>) -> QueryResult {
+    pub fn q(&self, q:Into<Query>) -> QueryChain {
         todo!()
     }
 
-    pub fn set_class(&self, cls:&str) -> QueryResult {
+    pub fn set_class(&self, cls:&str) -> QueryChain {
         todo!()
     }
 
@@ -38,23 +38,23 @@ impl QWidget {
         todo!()
     }
 
-    pub fn remove_class(&self, cls:&str) -> QueryResult {
+    pub fn remove_class(&self, cls:&str) -> QueryChain {
         todo!()
     }
 
-    pub fn empty(&self) -> QueryResult {
+    pub fn empty(&self) -> QueryChain {
         todo!()
     }
 
-    pub fn click(&self) -> QueryResult {
+    pub fn click(&self) -> QueryChain {
         todo!()
     }
 
-    pub fn dblclick(&self) -> QueryResult {
+    pub fn dblclick(&self) -> QueryChain {
         todo!()
     }
 
-    pub fn focus(&self) -> QueryResult {
+    pub fn focus(&self) -> QueryChain {
         todo!()
     }
 
