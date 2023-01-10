@@ -10,6 +10,7 @@ use crate::writer::ElementQueryWrap;
 use crate::{Element, Error, AttributeGetter, DummyLens};
 
 mod color;
+pub(crate) mod ex_custom_widget;
 
 struct LazyWrapperWidget<W:Widget<D>,D> {
     child : Option<W>,
@@ -218,7 +219,7 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
         };
         ( $widget:ident, "padding" ) => {
             if let Some(v) = get_style!("padding") {
-                let mut splits = v.split_whitespace();
+                let mut splits = v.split_whitespace().map( |s| &s[..s.find("px").unwrap_or(s.len())] );
                 let count = splits.clone().count();
                 if count == 1 {
                     $widget.padding( splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64) ).boxed()
@@ -250,9 +251,9 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
                     b"x-large" => 24f64,
                     b"xx-large" => 32f64,
                     [val @ .. , b'p', b'x'] => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64),
-                    [val @ .. , b'e', b'm'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap(),
-                    [val @ .. , b'p', b't'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap(),
-                    [val @ .. , b'%'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap(),
+                    [val @ .. , b'e', b'm'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap_or(13.333f64),
+                    [val @ .. , b'p', b't'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap_or(13.333f64),
+                    [val @ .. , b'%'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap_or(13.333f64),
                     val @ _ => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
                 };
                 $widget.set_text_size( font_size )
@@ -284,12 +285,6 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
                     "justify" => $widget.set_text_alignment(TextAlignment::Justified),
                     _ => return Err( Error::InvalidAttributeValue((0,"text-align")) )
                 }
-            }
-        };
-
-        ( $widget:ident, "placeholder" ) => {
-            if let Some(v) = get_style!("placeholder") {
-                $widget.set_placeholder( v.to_owned() );
             }
         };
 
@@ -436,7 +431,11 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
         style!(textbox, "color");
         style!(textbox, "font-size");
         style!(textbox, "text-align");
-        style!(textbox, "placeholder");
+
+        if let Some(placeholder) = attrs.get_as::<String>(b"placeholder") {
+            textbox.set_placeholder(placeholder);
+        }
+
         textbox.lens( DummyLens::<(),String>::new(String::new()) ).boxed()
     }
 
@@ -561,15 +560,19 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
     else if tag == "widget" {
         let name = attrs.get_result("fn")?;
         let name = String::from_utf8_lossy(name.as_ref());
-        if let Some(elem) = parsed_map.get( name.as_ref() ) {
-            build_widget(parsed_map, &[], elem, css)?
+        if name == "demo_custom_widget" {
+            ex_custom_widget::CustomWidget{}.boxed()
         } else {
-            return Err(Error::CustomWidgetNotExist( (elem.src_pos, name.as_ref().to_owned() ) ))
+            if let Some(elem) = parsed_map.get( name.as_ref() ) {
+                build_widget(parsed_map, &[], elem, css)?
+            } else {
+                return Err(Error::CustomWidgetNotExist( (elem.src_pos, name.as_ref().to_owned() ) ))
+            }
         }
     }
 
     else {
-        unimplemented!("Unknown tag : {}",tag)
+        return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
     };
 
 

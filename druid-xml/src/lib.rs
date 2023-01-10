@@ -80,6 +80,9 @@ pub enum Error {
 	///Unknown attribute
 	UnknownAttribute( usize ),
 
+	//Unknwon localname
+	UnknownTag( (usize,String) ),
+
 	///Not available as top elment
 	InvalidTopElement( usize ),
 
@@ -106,6 +109,7 @@ impl Error {
 			Error::CustomWidgetNotExist( (s,_) ) => *s,
 			Error::ChildlessElement(s) => *s,
 			Error::UnknownAttribute(s) => *s,
+			Error::UnknownTag( (s,_) ) => *s,
 			Error::InvalidTopElement(s) => *s,
 			Error::CSSSyntaxError( (s,_) ) => *s,
 			Error::XMLSyntaxError( (s, _) ) => *s,
@@ -413,7 +417,7 @@ extern {
 
 #[cfg(target_arch="wasm32")]
 #[cfg_attr(target_arch="wasm32", wasm_bindgen)]
-pub fn show_preview(src:String) {
+pub fn show_preview() {
 	use druid::{WindowDesc, LocalizedString, TimerToken, AppLauncher, Event, Widget, Data, Lens, EventCtx, LayoutCtx, UpdateCtx, LifeCycle, LifeCycleCtx, PaintCtx, Env, Size, BoxConstraints};
 
 	std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -451,9 +455,10 @@ pub fn show_preview(src:String) {
 										Error::InvalidAttributeValue( (s, n) ) => xml_error("InvalidAttributeValue", s, n),
 										Error::InvalidSizeAttributeValue( s ) => xml_error("InvalidSizeAttributeValue", s, ""),
 										Error::InvalidBorderAttributeValue( s ) => xml_error("InvalidBorderAttributeValue", s, ""),
-										Error::CustomWidgetNotExist( (s,name) ) => xml_error("InvalidBorderAttributeValue", s, &name),
+										Error::CustomWidgetNotExist( (s,name) ) => xml_error("CustomWidgetNotExist", s, &name),
 										Error::ChildlessElement(s) => xml_error("ChildlessElement", s, ""),
 										Error::UnknownAttribute(s) => xml_error("UnknownAttribute", s, ""),
+										Error::UnknownTag( (s,e) ) => xml_error("UnknownTag", s, &e),
 										Error::InvalidTopElement(s) => xml_error("InvalidTopElement", s, ""),
 										Error::CSSSyntaxError( (s, e) ) => xml_error("CSSSyntaxError", s, &format!("{:?}",e) ),
 										Error::XMLSyntaxError( (s, e) ) => xml_error("XMLSyntaxError", s, &format!("{:?}",e) ),

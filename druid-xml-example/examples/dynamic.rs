@@ -2,9 +2,9 @@
 use druid::{AppLauncher, LocalizedString, WindowDesc,Widget};
 
 fn build_main() -> Box<dyn Widget<()>> {
-    let map = druid_xml::dynamic::generate_widget(
+    druid_xml::dynamic::generate_widget(
         r#"
-        <!-- The top-level element must have a `fn` `lens` element. -->
+        <!-- The top-level element must have a `fn` `lens` attribute. -->
         <!-- `fn` is generated function name. -->
         <!-- `lens` is druid `Lens` type. -->
         <flex direction="column" fn="build_main" lens="()">
@@ -15,13 +15,7 @@ fn build_main() -> Box<dyn Widget<()>> {
           <label>Second</label>
         </flex>
         "#
-    ).unwrap();
-    for (name,w) in map.into_iter() {
-        if name == "build_main" {
-            return w
-        }
-    }
-    panic!("Can't find build_main")
+    ).unwrap()
 }
 
 fn main() {
