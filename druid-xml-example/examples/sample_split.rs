@@ -15,7 +15,7 @@ pub fn main() {
     druid_xml!(
         r#"
 <style>
-  #title {font-size:20px; color:dodgerblue; padding:10px; border:1px solid gray;}
+  #title {font-size:13px; color:dodgerblue; padding:10px;}
   [fn=icon] { border:1px solid white; width:60px }
   [fn=icon] .icon { font-size:25px; color:cyan }
   [fn=icon] .desc { font-size:10px }
@@ -53,24 +53,28 @@ pub fn main() {
 
 <!-- main frame -->
 <flex direction="column" fn="build_main" lens="MyApplication">
-  <label flex="1" id="title">MyApplication</label>
+  <flex>
+    <label flex="1" id="title">MyApplication</label>
+  </flex>
   
   <my_icon_bar/>
   
   <spacer/>
   
-  <split direction="column" flex="1" bar_size="3" solid_bar="true" draggable="true" style="height:200px; border:1px solid gray;" split_point="0.3" >
-    <split_left/>
-    <split_right/>
+  <split direction="row" flex="1" split_point="0.9">
+    <split direction="column" flex="1" bar_size="3" solid_bar="true" draggable="true" style="height:200px; border:1px solid gray;" split_point="0.3" >
+      <split_left/>
+      <split_right/>
+    </split>
+    <label>Status</label>
   </split>
- 
 </flex>
         "#
     );
     
     
     let window = WindowDesc::new(build_main)
-        .window_size((223., 300.))
+        .window_size((320., 480.))
         .resizable(false)
         .title(
             LocalizedString::new("basic-demo").with_placeholder("Basic Demo"),
