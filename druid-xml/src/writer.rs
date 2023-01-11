@@ -1,12 +1,13 @@
 
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use quick_xml::events::BytesStart;
 use quick_xml::name::{self, QName};
 use simplecss::{Declaration, DeclarationTokenizer, StyleSheet};
 use std::fmt::Write;
 
-use crate::named_color;
+use crate::{named_color, AttributesWrapper};
 use crate::{AttributeGetter, Element, Error};
 
 /// stack[parent .. elem]
@@ -67,7 +68,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
 
 pub(crate) trait SourceGenerator {
     fn write_raw(&mut self,code:&str) -> Result<(),Error>;
-    fn write(&mut self, elem:&Element, css:&StyleSheet) -> Result<(),Error>;
+    fn write(&mut self, parsed_map:&HashMap<String,Element>, elem:&Element, css:&StyleSheet) -> Result<(),Error>;
 }
 
 pub struct DruidGenerator {
@@ -91,7 +92,7 @@ impl DruidGenerator {
 }
 
 impl DruidGenerator {
-    fn impl_write(&mut self, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<(),Error> {
+    fn impl_write<'a>(&mut self, parameter:Option<&AttributesWrapper<'a>>, parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<(),Error> {
         let depth = parent_stack.len();
         let elem_query = ElementQueryWrap { parent_stack, elem };
 
@@ -118,7 +119,7 @@ impl DruidGenerator {
         let tag = String::from_utf8_lossy(tag_qname.as_ref());
         let mut tag_wrap:&str = &tag;
 
-        let attrs = elem.attributes(None);
+        let attrs = elem.attributes(parameter);
         let elem_style = attrs.get(b"style").unwrap_or( Cow::Borrowed(b"") );
         let elem_style_str = &String::from_utf8_lossy(&elem_style) as &str;
         let specific_style:Vec<Declaration> = DeclarationTokenizer::from( elem_style_str ).collect();
@@ -201,6 +202,19 @@ impl DruidGenerator {
                 new_stack
             } }
         }
+
+        let mut text = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("") );
+
+        if text.starts_with("${") && text.ends_with('}') {
+            let key = text[2..text.len()-1].trim();
+            if let Some(parameter) = parameter {
+                if let Some(param_value) = parameter.get( key.as_bytes() ) {
+                    text = Cow::Owned(String::from_utf8_lossy(&param_value).as_ref().to_owned());
+                    //TODO : how to avoid?
+                    // text = String::from_utf8_lossy(param_value);
+                }
+            } 
+        }
         
         let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
         let input_type = String::from_utf8_lossy( input_type_holder );
@@ -253,9 +267,9 @@ impl DruidGenerator {
                     }
                 } else {
                     src!("let child = {{\n");
-                    self.impl_write(&new_stack, child, css)?;
+                    self.impl_write(parameter, parsed_map, &new_stack, child, css)?;
                     src!("}};\n");
-                    if let Some(flex) =child.attributes(None).get(b"flex") {
+                    if let Some(flex) = child.attributes(None).get(b"flex") {
                         src!("flex.add_flex_child(child, {}f64);\n", String::from_utf8_lossy(&flex));
                     } else {
                         src!("flex.add_child( child );\n");
@@ -266,8 +280,12 @@ impl DruidGenerator {
 
         //WARN : checkbox is none-standard
         else if tag == "label" || tag == "button" {
-            let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
-            src!("let mut label = druid::widget::Label::new(\"{}\");\n", name );
+            let label_text = if text == "" {
+                tag.as_ref()
+            } else {
+                &text
+            };
+            src!("let mut label = druid::widget::Label::new(\"{label_text}\");\n" );
             style!("label.set_text_color(", "color", ");\n");
             style!("label.set_text_size(", "font-size", ");\n");
             style!("label.set_text_alignment(\"", "text-align", "\");\n");
@@ -280,7 +298,12 @@ impl DruidGenerator {
         else if tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
             //TODO : checkbox has not label like button. color and text_size
             tag_wrap = "checkbox";
-            src!("let checkbox = Checkbox::new(label);\n");
+            let label_text = if text == "" {
+                "checkbox"
+            } else {
+                &text
+            };
+            src!("let checkbox = druid::widget::Checkbox::new(\"{label_text}\");\n");
         }
 
         //TODO : password type?
@@ -290,7 +313,9 @@ impl DruidGenerator {
             style!("textbox.set_text_color(", "color", ");\n");
             style!("textbox.set_text_size(", "font-size", ");\n");
             style!("textbox.set_text_alignment(\"", "text-align", "\");\n");
-            style!("textbox.set_place_holder(\"", "placeholder", "\");\n");
+            if let Some(placeholder) = attrs.get_as::<String>(b"placeholder") {
+                src!("textbox.set_placeholder(\"{placeholder}\");\n");
+            }
         }
 
         //WARN : "image" is none-standard
@@ -320,7 +345,7 @@ impl DruidGenerator {
             }
             let new_stack = new_parent_stack!();
             src!("let child = {{\n");
-            self.impl_write(&new_stack, &elem.childs[0], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
             src!("}};\n");
             src!("let mut scroll = druid::widget::Scroll::new(child);\n");
         }
@@ -344,11 +369,11 @@ impl DruidGenerator {
             }
             let new_stack = new_parent_stack!();
             src!("let one = {{\n");
-            self.impl_write(&new_stack, &elem.childs[0], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
             src!("}};");
 
             src!("let two = {{\n");
-            self.impl_write(&new_stack, &elem.childs[1], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[1], css)?;
             src!("}};");
 
             if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
@@ -397,7 +422,7 @@ impl DruidGenerator {
 
         else if tag == "switch" {
             //TODO : style
-            src!("let mut switch = Switch::new();\n");
+            src!("let mut switch = druid::widget::Switch::new();\n");
         }
 
         //TODO
@@ -412,7 +437,7 @@ impl DruidGenerator {
             }
             let new_stack = new_parent_stack!();
             src!("let child = {{\n");
-            self.impl_write(&new_stack, &elem.childs[0], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
             src!("}};\n");
 
             src!( "let mut container = druid::widget::Container::new(child);\n");
@@ -420,7 +445,16 @@ impl DruidGenerator {
             style!("container.set_border(", "border", ");\n");
         }
         else {
-            unimplemented!("Unknown tag : {}",tag);
+            tag_wrap = "custom_widget";
+            if let Some(elem) = parsed_map.get( tag.as_ref() ) {
+                let new_stack = new_parent_stack!();
+                src!("let custom_widget = {{\n");
+                self.impl_write(Some(&attrs), parsed_map, &new_stack, elem, css)?;
+                src!("}};\n");
+            } else {
+                src!("let custom_widget = {tag}();\n");
+                //return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
+            }
         }
 
 
@@ -466,8 +500,8 @@ impl SourceGenerator for DruidGenerator {
         Ok(())
     }
 
-    fn write(&mut self, elem:&Element, css:&StyleSheet) -> Result<(),Error> {
-        self.impl_write(&mut vec![], elem, css)
+    fn write(&mut self, elem_map:&HashMap<String,Element>, elem:&Element, css:&StyleSheet) -> Result<(),Error> {
+        self.impl_write(None,elem_map, &mut vec![], elem, css)
     }
 }
 
@@ -476,13 +510,13 @@ struct CSSAttribute;
 
 impl CSSAttribute {
     fn padding(w:&mut String, v:&str) -> Result<(),Error> {
-        let mut splits = v.split_whitespace();
+        let mut splits = v.split_whitespace().map( |s| &s[..s.find("px").unwrap_or(s.len())] );
         let count = splits.clone().count();
         if count == 1 {
             Self::size(w, splits.next().unwrap())?
         } else if count == 2 || count == 4 {
             write!(w,"(").unwrap();
-            splits.for_each(|e| write!(w,"{},",e).unwrap() );
+            splits.for_each(|e| write!(w,"{}f64,",e).unwrap() );
             write!(w,")").unwrap();
         } else {
             panic!("The number of padding parameters must be one of 1,2,4. but \"{}\"",v);
@@ -564,8 +598,9 @@ impl CSSAttribute {
             Err(Error::InvalidAttributeValue((0,"border")))
         } else {
             let color = splited.next().unwrap_or("black");
-            write!(w,"{},", width).unwrap();
-            Self::color(w,color)
+            Self::color(w,color).unwrap();
+            write!(w,",{}f64", width).unwrap();
+            Ok(())
         }
     }
 

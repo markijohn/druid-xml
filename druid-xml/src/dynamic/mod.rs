@@ -418,7 +418,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     //WARN : checkbox is none-standard
     else if tag == "label" || tag == "button" {
         let label_text = if text == "" {
-            "Label"
+            tag.as_ref()
         } else {
             &text
         };
@@ -583,7 +583,6 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
             ex_custom_widget::CustomWidget{}.boxed()
         } else {
             if let Some(elem) = parsed_map.get( tag.as_ref() ) {
-                crate::log( &format!("{} : {}",tag, elem.attributes(parameter).tuples()) );
                 let new_stack = new_parent_stack!();
                 build_widget(Some(&attrs), parsed_map, &new_stack, elem, css)?
             } else {

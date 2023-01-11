@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use quick_xml::events::attributes::Attributes;
@@ -232,6 +233,9 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 	let mut writer = DruidGenerator::new();
 	let mut style = StyleSheet::new();
 	let mut reader = Reader::from_str(xml);
+	let mut elem_map = HashMap::new();
+	let mut expected_main_widget = None;
+	let mut last_widget = None;
 	loop {
 		let pos = reader.buffer_position();
 		match reader.read_event() {
@@ -249,14 +253,12 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 					},
 					_ => {						
 						if let Some(elem) = parse_element(pos, Some(Event::Start(e)), &mut reader )? {
-							let attrs = elem.attributes(None);
-							let fn_name = attrs.get_result("fn")?;
-							let fn_name = String::from_utf8_lossy( fn_name.as_ref() );
-							let lens = attrs.get_result("lens")?;
-							let lens = String::from_utf8_lossy( lens.as_ref() );
-							writer.write_raw(&format!("fn {fn_name}() -> impl druid::Widget<{lens}> {{\n") ).unwrap();
-							writer.write(&elem, &style).unwrap();
-							writer.write_raw("}\n").unwrap();
+							let fnname = elem.attributes( None ).get_as_result::<String>("fn")?;
+							last_widget = Some(fnname.clone());
+                            if fnname.find("main").is_some() {
+                                expected_main_widget = Some(fnname);
+                            }
+							elem_map.insert( elem.attributes( None ).get_as_result::<String>("fn")?, elem);
 						} else {
 							break
 						}
@@ -277,6 +279,25 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 			Ok(Event::End(_)) => (), //return Err(Error::CloseWithoutStart(reader.buffer_position())),
 		}
 	}
+
+
+	if let Some(main) = expected_main_widget.and( last_widget ) {
+        if let Some(elem ) = elem_map.get(&main) {
+			let attrs = elem.attributes(None);
+			let fn_name = attrs.get_result("fn")?;
+			let fn_name = String::from_utf8_lossy( fn_name.as_ref() );
+			let lens = attrs.get_result("lens")?;
+			let lens = String::from_utf8_lossy( lens.as_ref() );
+			writer.write_raw(&format!("fn {fn_name}() -> impl druid::Widget<{lens}> {{\n") ).unwrap();
+			writer.write(&elem_map, &elem, &style).unwrap();
+			writer.write_raw("}\n").unwrap();
+        } else {
+            panic!();
+        }
+    } else {
+        panic!();
+    }
+
 	Ok( writer.into() )
 }
 
@@ -606,6 +627,41 @@ mod test {
 			<label>Hello Druid!</label>
 			<button>OK</button>
 		</flex>
+        "#;
+		let result = super::compile( src );
+		match result {
+			Ok(compiled) => println!("{}", compiled),
+			Err(e) => { println!("Error : {:?} : {}", e, &src[e.error_at() .. ])}
+		}
+	}
+
+	#[test]
+	fn custom_widget() {
+		let src = r#"
+        <style>
+        .wrap_border { padding:10; border:5px solid cyan; width:200px; height:50px; }
+        </style>
+        
+        <flex fn="my_custom">
+          <label>Label</label>
+          <textbox lens="MyAppState:name"/>
+        </flex>
+        
+        <flex fn="my_custom_param">
+          <label>${name}</label>
+          <textbox placeholder="${placeholder}" lens="MyAppState:name"/>
+        </flex>
+        
+        <flex direction="column" fn="build_main" lens="MyAppState" must_fill_main_axis="true" axis_alignment="spaceevenly">
+          <!-- map custom widget -->
+          <my_custom/>
+        
+          <!-- custom widget with style -->
+          <my_custom class="wrap_border"/>
+          
+          <!-- custom widget with parameter -->
+          <my_custom_param name="MyName" placeholder="Input here..."/>
+        </flex>
         "#;
 		let result = super::compile( src );
 		match result {
