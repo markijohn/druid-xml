@@ -48,7 +48,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     }
 
     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
-		if let Some(v) = self.elem.attributes().get(local_name.as_bytes()) {
+		if let Some(v) = self.elem.attributes(None).get(local_name.as_bytes()) {
 			return operator.matches( &String::from_utf8_lossy(&v) )
 		}
 
@@ -118,7 +118,7 @@ impl DruidGenerator {
         let tag = String::from_utf8_lossy(tag_qname.as_ref());
         let mut tag_wrap:&str = &tag;
 
-        let attrs = elem.attributes();
+        let attrs = elem.attributes(None);
         let elem_style = attrs.get(b"style").unwrap_or( Cow::Borrowed(b"") );
         let elem_style_str = &String::from_utf8_lossy(&elem_style) as &str;
         let specific_style:Vec<Declaration> = DeclarationTokenizer::from( elem_style_str ).collect();
@@ -246,7 +246,7 @@ impl DruidGenerator {
             let new_stack = new_parent_stack!();
             for child in elem.childs.iter() {
                 if child.tag().as_ref() == b"spacer" {
-                    if let Some(flex) = child.attributes().get(b"flex") {
+                    if let Some(flex) = child.attributes(None).get(b"flex") {
                         src!("flex.add_flex_spacer({});\n", String::from_utf8_lossy(&flex));
                     } else {
                         src!("flex.add_default_spacer( );\n");
@@ -255,7 +255,7 @@ impl DruidGenerator {
                     src!("let child = {{\n");
                     self.impl_write(&new_stack, child, css)?;
                     src!("}};\n");
-                    if let Some(flex) =child.attributes().get(b"flex") {
+                    if let Some(flex) =child.attributes(None).get(b"flex") {
                         src!("flex.add_flex_child(child, {}f64);\n", String::from_utf8_lossy(&flex));
                     } else {
                         src!("flex.add_child( child );\n");

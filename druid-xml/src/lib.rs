@@ -71,9 +71,6 @@ pub enum Error {
 	///Invalid border value
 	InvalidBorderAttributeValue( usize ),
 
-	///
-	CustomWidgetNotExist( (usize, String) ),
-
 	///That element can't have child
 	ChildlessElement( usize ),
 
@@ -106,7 +103,6 @@ impl Error {
 			Error::InvalidAttributeValue( (s,_) ) => *s,
 			Error::InvalidSizeAttributeValue( s ) => *s,
 			Error::InvalidBorderAttributeValue( s ) => *s,
-			Error::CustomWidgetNotExist( (s,_) ) => *s,
 			Error::ChildlessElement(s) => *s,
 			Error::UnknownAttribute(s) => *s,
 			Error::UnknownTag( (s,_) ) => *s,
@@ -133,14 +129,30 @@ impl <'a> Element<'a> {
 		self.bs.name()
 	}
 
-	pub fn attributes(&'a self) -> AttributesWrapper<'a> {
-		AttributesWrapper { pos:self.src_pos, attrs:self.bs.attributes() }
+	pub fn attributes(&'a self, rel_param:Option<&'a AttributesWrapper>) -> AttributesWrapper<'a> {
+		AttributesWrapper { pos:self.src_pos, attrs:self.bs.attributes(), rel_attrs:rel_param }
 	}
 }
 
+#[derive(Clone)]
 pub struct AttributesWrapper<'a> {
 	pos : usize,
-	attrs : Attributes<'a>
+	attrs : Attributes<'a>,
+	rel_attrs : Option<&'a AttributesWrapper<'a>>
+}
+
+impl <'a> AttributesWrapper<'a> {
+	fn tuples(&self) -> String {
+		use std::fmt::Write;
+		let mut r = "&[".to_owned();
+		self.attrs.clone().map( |e| {
+			if let Ok(e) = e {
+				write!(&mut r,"({},{}),", String::from_utf8_lossy(e.key.as_ref()), String::from_utf8_lossy(e.value.as_ref())).unwrap();
+			}
+		});
+		r.push(']');
+		r
+	}
 }
 
 pub(crate) trait AttributeGetter {
@@ -188,13 +200,31 @@ impl <'a> AttributeGetter for AttributesWrapper<'a> {
 		.find( |e| 
 			e.is_ok() && e.as_ref().unwrap().key.as_ref() == name
 		).map( |e|  {
-			e.unwrap().value
+			let value = e.unwrap().value;
+			let ck_value = String::from_utf8_lossy(&value);
+			if ck_value.starts_with("${") && ck_value.ends_with("}") {
+				if let Some(rel) = self.rel_attrs {
+					let key = &ck_value[2..ck_value.len()-1];
+					if let Some(alter_value) = rel.get(key.as_bytes() ) {
+						return alter_value
+					}
+				}
+				// let key = &ck_value[2..ck_value.len()-1];
+				// if let Some(alter) = self.rel_attrs.clone().unwrap().find( |e|
+				// 	e.is_ok() && e.as_ref().unwrap().key.as_ref() == key.as_bytes()
+				// ) {
+				// 	return alter.unwrap().value
+				// }
+			}
+			value
 		})
     }
 
 	fn pos(&self) -> usize {
 		self.pos
 	}
+
+
 }
 
 
@@ -219,7 +249,7 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 					},
 					_ => {						
 						if let Some(elem) = parse_element(pos, Some(Event::Start(e)), &mut reader )? {
-							let attrs = elem.attributes();
+							let attrs = elem.attributes(None);
 							let fn_name = attrs.get_result("fn")?;
 							let fn_name = String::from_utf8_lossy( fn_name.as_ref() );
 							let lens = attrs.get_result("lens")?;
@@ -455,7 +485,6 @@ pub fn show_preview() {
 										Error::InvalidAttributeValue( (s, n) ) => xml_error("InvalidAttributeValue", s, n),
 										Error::InvalidSizeAttributeValue( s ) => xml_error("InvalidSizeAttributeValue", s, ""),
 										Error::InvalidBorderAttributeValue( s ) => xml_error("InvalidBorderAttributeValue", s, ""),
-										Error::CustomWidgetNotExist( (s,name) ) => xml_error("CustomWidgetNotExist", s, &name),
 										Error::ChildlessElement(s) => xml_error("ChildlessElement", s, ""),
 										Error::UnknownAttribute(s) => xml_error("UnknownAttribute", s, ""),
 										Error::UnknownTag( (s,e) ) => xml_error("UnknownTag", s, &e),

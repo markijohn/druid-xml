@@ -7,7 +7,7 @@ use quick_xml::{Reader, events::Event};
 use simplecss::{StyleSheet, Declaration, DeclarationTokenizer};
 
 use crate::writer::ElementQueryWrap;
-use crate::{Element, Error, AttributeGetter, DummyLens};
+use crate::{Element, Error, AttributeGetter, DummyLens, AttributesWrapper};
 
 mod color;
 pub(crate) mod ex_custom_widget;
@@ -80,12 +80,12 @@ pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
 					},
 					_ => {						
 						if let Some(elem) = crate::parse_element(pos, Some(Event::Start(e)), &mut reader )? {
-                            let fnname = elem.attributes().get_as_result::<String>("fn")?;
+                            let fnname = elem.attributes( None ).get_as_result::<String>("fn")?;
                             last_widget = Some(fnname.clone());
                             if fnname.find("main").is_some() {
                                 expected_main_widget = Some(fnname);
                             }
-                            elem_map.insert( elem.attributes().get_as_result::<String>("fn")?, elem);
+                            elem_map.insert( elem.attributes( None ).get_as_result::<String>("fn")?, elem);
 						} else {
 							break
 						}
@@ -109,7 +109,7 @@ pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
 
     let widget = if let Some(main) = expected_main_widget.and( last_widget ) {
         if let Some(elem ) = elem_map.get(&main) {
-            build_widget(&elem_map, &[], &elem, &style)?
+            build_widget(None, &elem_map, &[], &elem, &style)?
         } else {
             Label::new(format!("Can't find main widget : {}", main) ).boxed()
         }
@@ -121,7 +121,7 @@ pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
 	Ok( widget )
 }
 
-fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<Box<dyn Widget<()>>,Error> {
+fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<Box<dyn Widget<()>>,Error> {
     let depth = parent_stack.len();
     let elem_query = ElementQueryWrap { parent_stack, elem };
 
@@ -148,7 +148,7 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
     let tag = String::from_utf8_lossy(tag_qname.as_ref());
     let mut tag_wrap:&str = &tag;
 
-    let attrs = elem.attributes();
+    let attrs = elem.attributes( parameter );
     let elem_style = attrs.get(b"style").unwrap_or( Cow::Borrowed(b"") );
     let elem_style_str = &String::from_utf8_lossy(&elem_style) as &str;
     let specific_style:Vec<Declaration> = DeclarationTokenizer::from( elem_style_str ).collect();
@@ -335,6 +335,19 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
             new_stack
         } }
     }
+
+    let mut text = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("") );
+
+    if text.starts_with("${") && text.ends_with('}') {
+        let key = text[2..text.len()-1].trim();
+        if let Some(parameter) = parameter {
+            if let Some(param_value) = parameter.get( key.as_bytes() ) {
+                text = Cow::Owned(String::from_utf8_lossy(&param_value).as_ref().to_owned());
+                //TODO : how to avoid?
+                // text = String::from_utf8_lossy(param_value);
+            }
+        } 
+    }
     
     let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
     let input_type = String::from_utf8_lossy( input_type_holder );
@@ -385,15 +398,14 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
         let new_stack = new_parent_stack!();
         for child in elem.childs.iter() {
             if child.tag().as_ref() == b"spacer" {
-                if let Some(v) = child.attributes().get(b"flex") {
+                if let Some(v) = child.attributes(None).get(b"flex") {
                     flex.add_flex_spacer( String::from_utf8_lossy(&v).parse::<f64>().unwrap_or(1f64) );
                 } else {
                     flex.add_default_spacer( );
                 }
             } else {
-                
-                let child_widget = build_widget(parsed_map, &new_stack, child, css)?;
-                if let Some(flex_param) = child.attributes().get_as::<f64>(b"flex") {
+                let child_widget = build_widget(parameter, parsed_map, &new_stack, child, css)?;
+                if let Some(flex_param) = child.attributes(None).get_as::<f64>(b"flex") {
                     flex.add_flex_child(child_widget, flex_param );
                 } else {
                     flex.add_child( child_widget );
@@ -405,8 +417,12 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
 
     //WARN : checkbox is none-standard
     else if tag == "label" || tag == "button" {
-        let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
-        let mut label = druid::widget::Label::new( name.as_ref() );
+        let label_text = if text == "" {
+            "Label"
+        } else {
+            &text
+        };
+        let mut label = druid::widget::Label::new( label_text );
         style!(label, "color");
         style!(label, "font-size");
         style!(label, "text-align");
@@ -419,9 +435,13 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
     }
 
     else if tag == "checkbox" || (tag == "input" && input_type == "checkbox") {
-        let name = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("Label") );
         tag_wrap = "checkbox";
-        Checkbox::new(name.as_ref() ).lens( DummyLens::<(),_>::new( false) ).boxed()
+        let label_text = if text == "" {
+            "Checkbox"
+        } else {
+            &text
+        };
+        Checkbox::new(label_text ).lens( DummyLens::<(),_>::new( false) ).boxed()
     }
 
     //TODO : password type?
@@ -466,7 +486,7 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
             return Err(Error::InvalidScrollChildNum(elem.src_pos))
         }
         let new_stack = new_parent_stack!();
-        let child = build_widget(parsed_map,&new_stack, &elem.childs[0], css)?;
+        let child = build_widget(parameter, parsed_map,&new_stack, &elem.childs[0], css)?;
         Scroll::new(child).boxed()
     }
 
@@ -491,8 +511,8 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
             return Err(Error::InvalidSplitChildNum(elem.src_pos))
         }
         let new_stack = new_parent_stack!();
-        let one = build_widget(parsed_map, &new_stack, &elem.childs[0], css)?;
-        let two = build_widget(parsed_map, &new_stack, &elem.childs[0], css)?;
+        let one = build_widget(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
+        let two = build_widget(parameter, parsed_map, &new_stack, &elem.childs[1], css)?;
 
         let mut split = if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
             Split::columns(one, two)
@@ -501,7 +521,8 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
         };
         
         if let Some(v) = attrs.get(b"split_point") {
-            split = split.split_point( String::from_utf8_lossy(&v).parse::<f64>().unwrap_or(0.5) );
+            let sp = String::from_utf8_lossy(&v).parse::<f64>().map( |e| if e <= 0f64 {0.1} else {e}).unwrap_or(0.5);
+            split = split.split_point( sp );
         }
         if let Some(v) = attrs.get(b"min_size") {
             let v = String::from_utf8_lossy(&v);
@@ -553,26 +574,22 @@ fn build_widget(parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], e
             return Err(Error::InvalidContainerChildNum(elem.src_pos))
         }
         let new_stack = new_parent_stack!();
-        let child = build_widget(parsed_map, &new_stack, &elem.childs[0], css)?;
+        let child = build_widget(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
         Container::new( child ).boxed()
     }
 
-    else if tag == "widget" {
-        let name = attrs.get_result("fn")?;
-        let name = String::from_utf8_lossy(name.as_ref());
-        if name == "demo_custom_widget" {
+    else {
+        if tag == "demo_custom_widget" {
             ex_custom_widget::CustomWidget{}.boxed()
         } else {
-            if let Some(elem) = parsed_map.get( name.as_ref() ) {
-                build_widget(parsed_map, &[], elem, css)?
+            if let Some(elem) = parsed_map.get( tag.as_ref() ) {
+                crate::log( &format!("{} : {}",tag, elem.attributes(parameter).tuples()) );
+                let new_stack = new_parent_stack!();
+                build_widget(Some(&attrs), parsed_map, &new_stack, elem, css)?
             } else {
-                return Err(Error::CustomWidgetNotExist( (elem.src_pos, name.as_ref().to_owned() ) ))
+                return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
             }
         }
-    }
-
-    else {
-        return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
     };
 
 
