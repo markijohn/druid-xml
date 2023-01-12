@@ -229,7 +229,7 @@ impl <'a> AttributeGetter for AttributesWrapper<'a> {
 }
 
 
-pub fn compile(xml:&str) -> Result<String,Error> {
+pub fn compile(xml:&str, wrappers:&HashMap<String,String>) -> Result<String,Error> {
 	let mut writer = DruidGenerator::new();
 	let mut style = StyleSheet::new();
 	let mut reader = Reader::from_str(xml);
@@ -289,7 +289,7 @@ pub fn compile(xml:&str) -> Result<String,Error> {
 			let lens = attrs.get_result("lens")?;
 			let lens = String::from_utf8_lossy( lens.as_ref() );
 			writer.write_raw(&format!("fn {fn_name}() -> impl druid::Widget<{lens}> {{\n") ).unwrap();
-			writer.write(&elem_map, &elem, &style).unwrap();
+			writer.write(&elem_map, &elem, &style, wrappers).unwrap();
 			writer.write_raw("}\n").unwrap();
         } else {
             panic!();
@@ -578,6 +578,8 @@ pub fn show_preview() {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
 	#[test]
 	fn test() {
 		let src = r#"
@@ -613,7 +615,7 @@ mod test {
 			</flex>
 		</flex>
 		"#;
-		let result = super::compile( src );
+		let result = super::compile( src, &HashMap::new() );
 		match result {
 			Ok(compiled) => println!("{}", compiled),
 			Err(e) => { println!("Error : {:?} : {}", e, &src[e.error_at() .. ])}
@@ -628,7 +630,7 @@ mod test {
 			<button>OK</button>
 		</flex>
         "#;
-		let result = super::compile( src );
+		let result = super::compile( src, &HashMap::new() );
 		match result {
 			Ok(compiled) => println!("{}", compiled),
 			Err(e) => { println!("Error : {:?} : {}", e, &src[e.error_at() .. ])}
@@ -663,7 +665,7 @@ mod test {
           <my_custom_param name="MyName" placeholder="Input here..."/>
         </flex>
         "#;
-		let result = super::compile( src );
+		let result = super::compile( src, &HashMap::new() );
 		match result {
 			Ok(compiled) => println!("{}", compiled),
 			Err(e) => { println!("Error : {:?} : {}", e, &src[e.error_at() .. ])}

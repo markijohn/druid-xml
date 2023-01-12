@@ -68,7 +68,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
 
 pub(crate) trait SourceGenerator {
     fn write_raw(&mut self,code:&str) -> Result<(),Error>;
-    fn write(&mut self, parsed_map:&HashMap<String,Element>, elem:&Element, css:&StyleSheet) -> Result<(),Error>;
+    fn write(&mut self, parsed_map:&HashMap<String,Element>, elem:&Element, css:&StyleSheet, wrappers:&HashMap<String,String>) -> Result<(),Error>;
 }
 
 pub struct DruidGenerator {
@@ -92,7 +92,7 @@ impl DruidGenerator {
 }
 
 impl DruidGenerator {
-    fn impl_write<'a>(&mut self, parameter:Option<&AttributesWrapper<'a>>, parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<(),Error> {
+    fn impl_write<'a>(&mut self, parameter:Option<&AttributesWrapper<'a>>, parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet, wrappers:&HashMap<String,String>) -> Result<(),Error> {
         let depth = parent_stack.len();
         let elem_query = ElementQueryWrap { parent_stack, elem };
 
@@ -267,7 +267,7 @@ impl DruidGenerator {
                     }
                 } else {
                     src!("let child = {{\n");
-                    self.impl_write(parameter, parsed_map, &new_stack, child, css)?;
+                    self.impl_write(parameter, parsed_map, &new_stack, child, css, wrappers)?;
                     src!("}};\n");
                     if let Some(flex) = child.attributes(None).get(b"flex") {
                         src!("flex.add_flex_child(child, {}f64);\n", String::from_utf8_lossy(&flex));
@@ -345,7 +345,7 @@ impl DruidGenerator {
             }
             let new_stack = new_parent_stack!();
             src!("let child = {{\n");
-            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css, wrappers)?;
             src!("}};\n");
             src!("let mut scroll = druid::widget::Scroll::new(child);\n");
         }
@@ -369,11 +369,11 @@ impl DruidGenerator {
             }
             let new_stack = new_parent_stack!();
             src!("let one = {{\n");
-            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css, wrappers)?;
             src!("}};");
 
             src!("let two = {{\n");
-            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[1], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[1], css, wrappers)?;
             src!("}};");
 
             if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
@@ -388,25 +388,6 @@ impl DruidGenerator {
             attr!("split = split.min_bar_area(", b"min_bar_area", "f64);\n");
             attr!("split = split.draggable(", b"draggable", ");\n");
             attr!("split = split.solid_bar(", b"solid_bar", ");\n");
-
-            // if let Some(v) = attrs.get(b"split_point") {
-            //     src!("split = split.split_pointer({});\n", String::from_utf8_lossy(&v) );
-            // }
-            // if let Some(v) = attrs.get(b"min_size") {
-            //     src!("split = split.min_size({});\n", String::from_utf8_lossy(&v) );
-            // }
-            // if let Some(v) = attrs.get(b"bar_size") {
-            //     src!("split = split.bar_size({});\n", String::from_utf8_lossy(&v) );
-            // }
-            // if let Some(v) = attrs.get(b"min_bar_area") {
-            //     src!("split = split.min_bar_area({});\n", String::from_utf8_lossy(&v) );
-            // }
-            // if let Some(v) = attrs.get(b"draggable") {
-            //     src!("split = split.min_bar_area({});\n", String::from_utf8_lossy(&v) );
-            // }
-            // if let Some(v) = attrs.get(b"solid_bar") {
-            //     src!("split = split.solid_bar({});\n", String::from_utf8_lossy(&v) );
-            // }
         }
 
         else if tag == "stepper" {
@@ -437,7 +418,7 @@ impl DruidGenerator {
             }
             let new_stack = new_parent_stack!();
             src!("let child = {{\n");
-            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
+            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css, wrappers)?;
             src!("}};\n");
 
             src!( "let mut container = druid::widget::Container::new(child);\n");
@@ -449,7 +430,7 @@ impl DruidGenerator {
             if let Some(elem) = parsed_map.get( tag.as_ref() ) {
                 let new_stack = new_parent_stack!();
                 src!("let custom_widget = {{\n");
-                self.impl_write(Some(&attrs), parsed_map, &new_stack, elem, css)?;
+                self.impl_write(Some(&attrs), parsed_map, &new_stack, elem, css, wrappers)?;
                 src!("}};\n");
             } else {
                 src!("let custom_widget = {tag}();\n");
@@ -485,9 +466,18 @@ impl DruidGenerator {
                 style!("let {tag_wrap} = druid::WidgetExt::background({tag_wrap}, " , "background-color", ");\n" );
                 style!("let {tag_wrap} = druid::WidgetExt::border({tag_wrap}, " , "border", ");\n" );
             }
+
+            for (query, wrapper) in wrappers.iter() {
+                if let Some(selector) = simplecss::Selector::parse(query) {
+                    if selector.matches( &elem_query ) {
+                        //src!("let {tag_wrap} = druid::WidgetExt::boxed( {tag_wrap} );\n");
+                        src!("let {tag_wrap} = ({wrapper}) ({tag_wrap});\n");
+                    }
+                }
+            }
         }
 
-        src!("{}\n", tag_wrap ); //return element
+        src!("{tag_wrap}\n" ); //return element
 
         Ok(())
     }
@@ -500,8 +490,8 @@ impl SourceGenerator for DruidGenerator {
         Ok(())
     }
 
-    fn write(&mut self, elem_map:&HashMap<String,Element>, elem:&Element, css:&StyleSheet) -> Result<(),Error> {
-        self.impl_write(None,elem_map, &mut vec![], elem, css)
+    fn write(&mut self, elem_map:&HashMap<String,Element>, elem:&Element, css:&StyleSheet, wrappers:&HashMap<String,String>) -> Result<(),Error> {
+        self.impl_write(None,elem_map, &mut vec![], elem, css, wrappers)
     }
 }
 

@@ -148,10 +148,10 @@ pub(crate) fn to_color(name:&str, default:Option<Color>) -> Color {
             if tv.starts_with('#') {
                 Color::from_hex_str(tv).unwrap_or( default )
             } else if tv.starts_with("rgb") && tv.ends_with(')') {
-                let mut splits = tv[tv.find('(').map(|e| e+1).unwrap_or(0) .. tv.rfind(')').unwrap_or(tv.len())].split(',');
+                let mut splits = tv[tv.find('(').map(|e| e+1).unwrap_or(0) .. tv.rfind(')').unwrap_or(tv.len())].split(',').map( |e| e.trim() );
                 Color::rgb8(splits.next().unwrap_or("0").parse::<u8>().unwrap_or(0), splits.next().unwrap_or("0").parse::<u8>().unwrap_or(0), splits.next().unwrap_or("0").parse::<u8>().unwrap_or(0) )
             } else if tv.starts_with("rgba") && tv.ends_with(')') {
-                let mut splits = tv[tv.find('(').map(|e| e+1).unwrap_or(0) .. tv.rfind(')').unwrap_or(tv.len())].split(',');
+                let mut splits = tv[tv.find('(').map(|e| e+1).unwrap_or(0) .. tv.rfind(')').unwrap_or(tv.len())].split(',').map( |e| e.trim() );
                 Color::rgba8(splits.next().unwrap_or("0").parse::<u8>().unwrap_or(0), splits.next().unwrap_or("0").parse::<u8>().unwrap_or(0), splits.next().unwrap_or("0").parse::<u8>().unwrap_or(0), splits.next().unwrap_or("0").parse::<u8>().unwrap_or(0) )
             } else {
                 default

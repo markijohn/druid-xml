@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, WindowDesc, Data, Lens};
+use druid::{AppLauncher, WindowDesc, Data, Lens, WidgetExt};
 
 pub fn main() {
     #[derive(Clone, Lens, Data)]
@@ -53,6 +53,12 @@ pub fn main() {
             </flex>
         </flex>
         "#
+        ,
+        ".ok" => |widget:druid::widget::SizedBox<_>| {
+            widget.on_click( |ctx,data,env| {
+                println!("Clicked login");
+            })
+        }
     );
     
     let window = WindowDesc::new(build_main())

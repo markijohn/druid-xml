@@ -1,10 +1,12 @@
 extern crate proc_macro;
 
 
+use std::collections::HashMap;
+
 use proc_macro::{TokenStream};
 use syn::{parse_macro_input, Result, Token};
 use syn::parse::{Parse, ParseStream};
-
+use quote::quote;
 
 #[proc_macro]
 pub fn druid_xml( input:TokenStream ) -> TokenStream {
@@ -56,6 +58,13 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 	}
 
 	let druid_xml = parse_macro_input!(input as DruidXML);
-	let ui_code = druid_xml::compile(&druid_xml.xml_src.value()).unwrap();
+	let mut wrapper_maps = HashMap::new();
+	if let Some(wrappers) = druid_xml.maps.as_ref() {
+		wrappers.iter().for_each( |e| {
+			let w = &e.bindfn;
+			wrapper_maps.insert(e.query.value(), quote!(#w).to_string() );
+		});
+	}
+	let ui_code = druid_xml::compile(&druid_xml.xml_src.value(), &wrapper_maps).unwrap();
 	ui_code.parse().unwrap()
 }
