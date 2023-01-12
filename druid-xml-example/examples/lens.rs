@@ -1,11 +1,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, Color, Data, Lens, LocalizedString, RenderContext, Widget, WidgetExt,
-    WindowDesc,
-};
-
-use druid::widget::{MainAxisAlignment, CrossAxisAlignment, Flex, Label, Button, Switch, TextBox, Painter};
+use druid::{AppLauncher, Data, Lens, WindowDesc};
 
 #[derive(Clone, Debug, Data, Lens)]
 struct MyAppState {
@@ -26,12 +22,10 @@ pub fn main() {
         "#
     );
     
-    let window = WindowDesc::new(build_main)
-        .window_size((223., 300.))
-        .resizable(false)
-        .title(
-            LocalizedString::new("demo-title").with_placeholder("Basic lens demo"),
-        );
+    let window = WindowDesc::new(build_main())
+        .window_size((320., 300.))
+        .resizable(true)
+        .title("Lens demo");
     let state = MyAppState { name : "".to_owned(), flag : false };
     AppLauncher::with_window(window)
         .launch( state )

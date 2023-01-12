@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, LocalizedString, WindowDesc, Data, Lens};
+use druid::{AppLauncher, WindowDesc, Data, Lens};
 
 pub fn main() {
     #[derive(Clone, Lens, Data)]
@@ -38,12 +38,10 @@ pub fn main() {
         "#
     );
     
-    let window = WindowDesc::new(build_main)
-        .window_size((223., 300.))
+    let window = WindowDesc::new(build_main())
+        .window_size((640., 480.))
         .resizable(false)
-        .title(
-            LocalizedString::new("basic-demo").with_placeholder("Basic Demo"),
-        );
+        .title( "Custom Widget demo");
     AppLauncher::with_window(window)
         .launch( MyAppState { name : "".to_owned() } )
         .expect("launch failed");

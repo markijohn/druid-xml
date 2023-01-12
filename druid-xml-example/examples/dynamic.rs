@@ -1,5 +1,5 @@
 
-use druid::{AppLauncher, LocalizedString, WindowDesc,Widget};
+use druid::{AppLauncher,WindowDesc,Widget};
 
 fn build_main() -> Box<dyn Widget<()>> {
     druid_xml::dynamic::generate_widget(
@@ -19,12 +19,10 @@ fn build_main() -> Box<dyn Widget<()>> {
 }
 
 fn main() {
-    let window = WindowDesc::new(build_main)
+    let window = WindowDesc::new(build_main())
         .window_size((223., 300.))
-        .resizable(false)
-        .title(
-            LocalizedString::new("basic-demo").with_placeholder("Dynamic Basic Demo"),
-        );
+        .resizable(true)
+        .title("Dynamic demo");
     AppLauncher::with_window(window)
         .launch( () )
         .expect("launch failed");

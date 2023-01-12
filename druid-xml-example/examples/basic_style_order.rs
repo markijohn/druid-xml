@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, LocalizedString, WindowDesc};
+use druid::{AppLauncher, WindowDesc};
 
 pub fn main() {
     druid_xml!(
@@ -30,12 +30,10 @@ pub fn main() {
         "#
     );
     
-    let window = WindowDesc::new(build_main)
-        .window_size((223., 300.))
+    let window = WindowDesc::new(build_main() )
+        .window_size((320., 480.))
         .resizable(false)
-        .title(
-            LocalizedString::new("basic-demo").with_placeholder("Basic Demo"),
-        );
+        .title("Style order demo");
     AppLauncher::with_window(window)
         .launch( () )
         .expect("launch failed");

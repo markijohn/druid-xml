@@ -10,4 +10,5 @@ edition = "2018"
 [dependencies]
 druid-xml = {path="../druid-xml"}
 druid-xml-macro = {path="../druid-xml-macro"}
-druid = "0.7.0"
+#druid = "0.7.0"
+druid = {git="https://github.com/linebender/druid.git"}

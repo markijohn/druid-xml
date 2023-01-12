@@ -533,11 +533,11 @@ impl CSSAttribute {
     fn color(w:&mut String, v:&str) -> Result<(),Error> {
         let tv = v.trim();
         if tv.starts_with('#') {
-            write!(w,"druid::Color::from_hex_str({})", &tv[1..]).unwrap();
-        } else if tv.starts_with("rgb") && tv.ends_with(')') {
-            write!(w,"druid::Color::rgba8({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
+            write!(w,"druid::Color::from_hex_str({})", tv).unwrap();
         } else if tv.starts_with("rgba") && tv.ends_with(')') {
-            write!(w,"druid::Color::rgba({})", &tv[tv.find('(').unwrap() .. tv.rfind(')').unwrap()]).unwrap();
+            write!(w,"druid::Color::rgba8({})", &tv[tv.find('(').unwrap()+1 .. tv.rfind(')').unwrap()]).unwrap();
+        } else if tv.starts_with("rgb") && tv.ends_with(')') {
+            write!(w,"druid::Color::rgb8({})", &tv[tv.find('(').unwrap()+1 .. tv.rfind(')').unwrap()]).unwrap();
         } else {
             if let Some(rgba) = named_color::named_color(v) {
                 write!(w,"{}", rgba).unwrap();

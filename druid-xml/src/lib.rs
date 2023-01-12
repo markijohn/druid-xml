@@ -564,7 +564,7 @@ pub fn show_preview() {
 		Box::new( DynWidget {timer_id:TimerToken::INVALID, child:None} )
 	}
 
-	let window = WindowDesc::new( build_main )
+	let window = WindowDesc::new( build_main() )
 	.window_size((223., 300.))
 	.resizable(false)
 	.title(

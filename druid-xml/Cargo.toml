@@ -11,7 +11,8 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 quick-xml = "0.27.1"
 simplecss = "0.2.1"
-druid = {version = "0.7.0"}
+#druid = "0.7.0"
+druid = {git="https://github.com/linebender/druid.git"}
 
 [target.'cfg(target_arch="wasm32")'.dependencies]
 wasm-bindgen = "0.2.83"

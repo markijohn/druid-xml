@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, LocalizedString, WindowDesc, Data, Lens};
+use druid::{AppLauncher, WindowDesc, Data, Lens};
 
 pub fn main() {
     #[derive(Clone, Lens, Data)]
@@ -55,12 +55,10 @@ pub fn main() {
         "#
     );
     
-    let window = WindowDesc::new(build_main)
-        .window_size((223., 300.))
+    let window = WindowDesc::new(build_main())
+        .window_size((500., 380.))
         .resizable(false)
-        .title(
-            LocalizedString::new("basic-demo").with_placeholder("Basic Demo"),
-        );
+        .title("Login sample");
     AppLauncher::with_window(window)
         .launch( LoginInfo { id : "".to_owned(), pwd:"".to_owned(), remember:true } )
         .expect("launch failed");
