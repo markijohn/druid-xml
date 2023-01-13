@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use druid::kurbo::Line;
 use druid::{Widget,WidgetExt,TextAlignment,Color};
 use druid::widget::*;
 use quick_xml::{Reader, events::Event};
@@ -426,6 +427,15 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         style!(label, "color");
         style!(label, "font-size");
         style!(label, "text-align");
+
+        if let Some(lbk) = attrs.get(b"line-break") {
+            match lbk.as_ref() {
+                b"wordwrap" => label.set_line_break_mode( LineBreaking::WordWrap ),
+                b"clip" => label.set_line_break_mode( LineBreaking::Clip ),
+                b"overflow" => label.set_line_break_mode( LineBreaking::Overflow ),
+                _ => ()
+            }
+        }
 
         if tag == "button" {
             Button::from_label(label).boxed()

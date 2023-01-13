@@ -1,5 +1,11 @@
 
 
+pub struct QManage {
+    //stylers
+    //json_value
+}
+
+
 pub struct Query {
     
 }
@@ -40,6 +46,10 @@ impl QWidget {
 
     pub fn remove_class(&self, cls:&str) -> QueryChain {
         todo!()
+    }
+
+    pub fn trigger_class(&self, cls:&str) -> QueryChain {
+        
     }
 
     pub fn empty(&self) -> QueryChain {

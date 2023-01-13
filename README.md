@@ -155,7 +155,7 @@ pub fn main() {
  </tr>
  <tr>
    <td>label</td>
-   <td>flex<br/>multiline(not yet)</td>
+   <td>flex<br/>line-break</td>
  </tr>
  <tr>
    <td>button</td>
