@@ -13,11 +13,11 @@ pub struct Query {
 ///! Queriable widget
 pub struct QWidget {
     //id : unique index
-    //paint_stack : smallvec<Drawable>,
-    //attributes
-    //localname
+    //paint_stack : smallvec<Drawable>,?
+    //attributes?
+    //localname?
     //pseudostate
-    //value
+    //value?
     //childs
 }
 
@@ -29,9 +29,7 @@ impl QueryChain {
     pub fn q(q:Into<Query>) -> QueryChain {
         todo!()
     }
-}
 
-impl QWidget {
     pub fn q(&self, q:Into<Query>) -> QueryChain {
         todo!()
     }
