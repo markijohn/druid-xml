@@ -12,6 +12,11 @@ pub struct Query {
 
 ///! Queriable widget
 pub struct QWidget {
+    localname : Cow<'a,str>,
+    style : Rc<StyleSheet>,
+    parent : Rc<RefCell<QWidget>>,
+    origin : Option<Box<dyn Widget<Value>>>,
+    attribute : Attributes,
     //id : unique index
     //paint_stack : smallvec<Drawable>,?
     //attributes?
@@ -19,6 +24,36 @@ pub struct QWidget {
     //pseudostate
     //value?
     //childs
+}
+
+impl <T> Widget<T> for Rc<RefCell<Widget<T>>> {
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env) {
+        self.borrow_mut().event(ctx, event, data, env)
+    }
+
+    fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
+        self.borrow_mut().lifecycle(ctx, event, data, env);
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &T, data: &T, env: &Env) {
+        self.borrow_mut().update(ctx, old_data, data, env);
+    }
+
+    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env) -> Size {
+        self.borrow_mut().layout(ctx, bc, data, env)
+    }
+
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
+        self.deref_mut().paint(ctx, data, env);
+    }
+
+    fn id(&self) -> Option<WidgetId> {
+        self.borrow().id()
+    }
+
+    fn type_name(&self) -> &'static str {
+        self.borrow().type_name()
+    }
 }
 
 pub struct QueryChain {
