@@ -1,9 +1,12 @@
 use std::borrow::Cow;
 use druid::{Point,Size,Insets,Color,LinearGradient,RadialGradient, Widget, PaintCtx, Env, widget::BackgroundBrush, RenderContext};
-use druid::kurbo::{Arc, RoundedRect, Ellipse};
+use druid::kurbo::{Line, Arc, RoundedRect, Ellipse};
+use druid::piet::StrokeStyle;
 
-struct BorderStyle {
-    style : 
+
+#[derive(Clone)]
+pub struct BorderStyle {
+    style : StrokeStyle,
     width: f64,
     color: Color,
 }
@@ -49,16 +52,16 @@ pub enum Drawable {
     //radius : 
     //padding : top right bottom left
     //size : x , y
-    Rect{ pos:Pos, rect:RoundedRect, fill:FillMethod },
+    Rect{ pos:Pos, border:Option<BorderStyle>, rect:RoundedRect, fill:FillMethod },
 
-    Ellipse{ pos:Pos, elli:Ellipse, fill:FillMethod },
+    Ellipse{ pos:Pos, border:Option<BorderStyle>, elli:Ellipse, fill:FillMethod },
+
+    Arc { pos:Pos, border:BorderStyle, arc:Arc, col:Color },
 
     //Absolute line
     //start : absolute start point
     //end : absolute end point
-    Line{ start:Point, end:Point },
-
-    Text { pos:Pos, text:Cow<'static,str>, font:Option<&'static str>, font_size:Option<f64> }
+    Line{ pos:Pos, start:Option<Point>, end:Point, width:Option<f64>, col:Option<Color>, style:Option<StrokeStyle> }
 }
 
 pub struct DrawableStack(Vec<Drawable>);
@@ -67,29 +70,46 @@ impl DrawableStack {
     pub fn draw(&self, ctx:&mut PaintCtx) {
         for d in self.0.iter() {
             let bounds = ctx.size().to_rect();
+
+            macro_rules! draw {
+                (border, $shape:ident, $border:ident, $brush:ident) => {
+                    ctx.fill($shape, $brush);
+                    if let Some(border) = $border.as_ref() {
+                        ctx.stroke_styled($shape, $brush, border.width, &border.style);
+                    }
+                };
+            }
             
             match d {
-                Drawable::Rect { pos, rect, fill } => {
+                Drawable::Rect { pos, border, rect, fill } => {
                     match fill {
-                        FillMethod::Solid(b) => ctx.fill(rect, b),
-                        FillMethod::LinearGradient(b) => ctx.fill(rect, b),
-                        FillMethod::RadialGradient(b) => ctx.fill(rect, b),
+                        FillMethod::Solid(b) => { draw!(border, rect, border, b); },
+                        FillMethod::LinearGradient(b) => { draw!(border, rect, border, b); },
+                        FillMethod::RadialGradient(b) => { draw!(border, rect, border, b); },
                     }
                 },
-                Drawable::Ellipse { pos, elli, fill } => {
+                Drawable::Ellipse { pos, border, elli, fill } => {
                     match fill {
-                        FillMethod::Solid(b) => ctx.fill(elli, b),
-                        FillMethod::LinearGradient(b) => ctx.fill(elli, b),
-                        FillMethod::RadialGradient(b) => ctx.fill(elli, b),
+                        FillMethod::Solid(b) => { draw!(border, elli, border, b); },
+                        FillMethod::LinearGradient(b) => { draw!(border, elli, border, b); },
+                        FillMethod::RadialGradient(b) => { draw!(border, elli, border, b); },
                     }
                 },
-                Drawable::Line { start, end } => todo!(),
-                Drawable::Text { text, pos, font, font_size } => todo!(),
+                Drawable::Arc{ pos, border, arc, col } => { 
+                    ctx.stroke_styled(arc, col, border.width, &border.style);
+                }
+                Drawable::Line { pos, start, end, width, col, style } => {
+                    let width = width.unwrap_or(1f64);
+                    let col = col.unwrap_or( Color::rgb8(0,0,0) );
+                    let def_stroke = StrokeStyle::default();
+                    let style = style.as_ref().unwrap_or( &def_stroke );
+                    ctx.stroke_styled( Line::new( (0.,0.), (10.,10.) ), &col, width, &style );
+                },
             }
         }
     }
 
-    pub fn to_painter<T>(self) -> BackgroundBrush<T> {
+    pub fn to_background<T>(self) -> BackgroundBrush<T> {
         todo!()
     }
 }
