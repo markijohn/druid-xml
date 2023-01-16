@@ -1,38 +1,41 @@
-mod qwidget;
 mod drawable;
 
-trait QueryReq {
-    fn match(list:&[&Selector]) -> bool;
-}
 
-impl QueryReq for AsRef<str> {
-    fn match(list:&[&Selector]) -> bool {
-        //parse self
-        //find
-        todo!()
-    }
-}
+// mod qwidget;
+// mod drawable;
 
-struct QWID(usize);
+// trait QueryReq {
+//     fn match(list:&[&Selector]) -> bool;
+// }
 
-enum Event {
-    ClassChange,
-    Click,
-    Hover,
-    ValueChange,
-    TextChange
-}
+// impl QueryReq for AsRef<str> {
+//     fn match(list:&[&Selector]) -> bool {
+//         //parse self
+//         //find
+//         todo!()
+//     }
+// }
 
-pub struct QWSystem {
+// struct QWID(usize);
 
-}
+// enum Event {
+//     ClassChange,
+//     Click,
+//     Hover,
+//     ValueChange,
+//     TextChange
+// }
 
-impl QWSystem {
-    pub fn register(widget:QWidget) -> QWID {
-        todo!()
-    }
+// pub struct QWSystem {
 
-    pub fn q() -> QueryChain {
-        todo!()
-    }
-}
+// }
+
+// impl QWSystem {
+//     pub fn register(widget:QWidget) -> QWID {
+//         todo!()
+//     }
+
+//     pub fn q() -> QueryChain {
+//         todo!()
+//     }
+// }
