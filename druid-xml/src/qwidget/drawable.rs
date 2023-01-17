@@ -11,6 +11,45 @@ pub struct BorderStyle {
     color: Color,
 }
 
+pub enum Number {
+    Abs(u64), //absolute position
+    Rel(f64) //relative position
+}
+
+impl Number {
+    pub fn as_u64(&self) -> Option<u64> {
+        if let Self::Abs(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_u64_or(&self, def:u64) -> u64 {
+        if let Self::Abs(v) = self {
+            *v
+        } else {
+            def
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        if let Self::Rel(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_f64_or(&self, def:f64) -> f64 {
+        if let Self::Rel(v) = self {
+            *v
+        } else {
+            def
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum Round {
     Solid{ radius:f64, width:f64, color:Color },
@@ -26,7 +65,6 @@ pub enum FillMethod {
 
 #[derive(Clone)]
 pub enum Pos {
-    Abs{x:f64, y:f64},
     TopLeft{ x:f64, y:f64 },
     TopCenter { x:f64, y : f64 },
     TopRight { x:f64, y : f64 },
@@ -110,6 +148,11 @@ impl DrawableStack {
     }
 
     pub fn to_background<T>(self) -> BackgroundBrush<T> {
-        todo!()
+        let painter_fn = Box::new( 
+            move |ctx:&mut druid::PaintCtx, t:&T, env:&druid::Env| {
+                self.draw(ctx);
+            }
+        );
+        BackgroundBrush::Painter( druid::widget::Painter::<T>::new(painter_fn) )
     }
 }

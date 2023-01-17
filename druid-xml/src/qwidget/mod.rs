@@ -1,3 +1,5 @@
+mod flex;
+mod qwidget;
 mod drawable;
 
 

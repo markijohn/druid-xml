@@ -1,50 +1,94 @@
+use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref, DerefMut}};
 
+use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size};
+use serde_json::Value;
 
-pub struct QManage {
-    //stylers
-    //json_value
+//pub type QWidget = Rc<UnsafeCell<QWidgetRaw>>;
+
+#[derive(Clone)]
+pub struct JSValue(Value);
+
+impl druid::Data for JSValue {
+    fn same(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
 }
 
-
-pub struct Query {
-    
+impl Deref for JSValue {
+    type Target=Value;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
+
+impl DerefMut for JSValue {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
 
 ///! Queriable widget
-pub struct QWidget {
-    localname : Cow<'a,str>,
-    style : Rc<StyleSheet>,
-    parent : Rc<RefCell<QWidget>>,
+pub struct QWidgetRaw {
+    localname : Rc<String>,
+    classes : Vec<Rc<String>>,
+    parent : Option< QWidget >,
     origin : Option<Box<dyn Widget<Value>>>,
-    attribute : Attributes,
-    //id : unique index
-    //paint_stack : smallvec<Drawable>,?
-    //attributes?
-    //localname?
-    //pseudostate
-    //value?
-    //childs
+    //attribute : Attributes,
+    childs : Vec< QWidget >
 }
 
-impl <T> Widget<T> for Rc<RefCell<Widget<T>>> {
-    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env) {
+pub trait Queriable {
+    fn find(&self, q:&str) -> QueryChain;
+    fn q(&self, q:&str) -> QueryChain;
+    fn root(&self) -> QueryChain;
+}
+
+impl Queriable for QWidget {
+    fn find(&self, q:&str) -> QueryChain {
+        //find in self
+        QueryChain { queried : vec![ QWidget(self.0.clone()) ] }
+    }
+
+    fn q(&self, q:&str) -> QueryChain {
+        //find in root
+        QueryChain { queried : vec![ QWidget(self.0.clone()) ] }
+    }
+
+    fn root(&self) -> QueryChain {
+        let mut parent = self.0.clone();
+        
+        loop {
+            if let Some(p_parent) = unsafe { (&*parent.get()).parent.as_ref() } {
+                parent = p_parent.0.clone();
+            } else {
+                break
+            }
+        }
+        QueryChain { queried : vec![ QWidget(parent) ] }
+    }
+}
+
+impl Widget<JSValue> for QWidget {
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut JSValue, env: &Env) {
         self.borrow_mut().event(ctx, event, data, env)
     }
 
-    fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
+    fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &JSValue, env: &Env) {
         self.borrow_mut().lifecycle(ctx, event, data, env);
     }
 
-    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &T, data: &T, env: &Env) {
+    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &JSValue, data: &JSValue, env: &Env) {
         self.borrow_mut().update(ctx, old_data, data, env);
     }
 
-    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env) -> Size {
+    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &JSValue, env: &Env) -> Size {
         self.borrow_mut().layout(ctx, bc, data, env)
     }
 
-    fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
-        self.deref_mut().paint(ctx, data, env);
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &JSValue, env: &Env) {
+        self.borrow_mut().paint(ctx, data, env);
     }
 
     fn id(&self) -> Option<WidgetId> {
@@ -57,18 +101,11 @@ impl <T> Widget<T> for Rc<RefCell<Widget<T>>> {
 }
 
 pub struct QueryChain {
-    //queried : Vec<&'a QWidget>
+    queried : Vec<QWidget>
 }
 
+
 impl QueryChain {
-    pub fn q(q:Into<Query>) -> QueryChain {
-        todo!()
-    }
-
-    pub fn q(&self, q:Into<Query>) -> QueryChain {
-        todo!()
-    }
-
     pub fn set_class(&self, cls:&str) -> QueryChain {
         todo!()
     }
@@ -82,7 +119,7 @@ impl QueryChain {
     }
 
     pub fn trigger_class(&self, cls:&str) -> QueryChain {
-        
+        todo!()
     }
 
     pub fn empty(&self) -> QueryChain {
@@ -153,10 +190,10 @@ impl QueryChain {
         todo!()
     }
 
-    pub fn size(&self) -> ! {
+    pub fn size(&self) -> Size {
         todo!()
     }
-
+    
     pub fn text(&self) -> &str {
         todo!()
     }
@@ -165,18 +202,11 @@ impl QueryChain {
         todo!()
     }
 
-    pub fn val(&self) -> ! {
+    pub fn val(&self) -> Option<&Value> {
         //json value
         todo!()
     }
 
-    pub fn width(&self) -> usize {
-        todo!()
-    }
-
-    pub fn len(&self) -> usize {
-        todo!()
-    }
 }
 
 pub enum Drawable {
@@ -219,4 +249,13 @@ pub struct ImageParam {
 
 pub struct TextParam {
     //color, text, font-size
+}
+
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test() {
+        println!("Qwidget");
+    }
 }
