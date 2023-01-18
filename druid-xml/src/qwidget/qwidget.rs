@@ -1,9 +1,15 @@
-use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref, DerefMut}};
+use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref, DerefMut}, collections::HashSet};
 
 use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size};
 use serde_json::Value;
 
 //pub type QWidget = Rc<UnsafeCell<QWidgetRaw>>;
+
+
+pub struct QWidgetContext {
+    localname_table : HashSet<Rc<String>>,
+    class_table : HashSet<Rc<String>>,
+}
 
 #[derive(Clone)]
 pub struct JSValue(Value);
@@ -27,10 +33,11 @@ impl DerefMut for JSValue {
     }
 }
 
+#[derive(Clone)]
 pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
 
 ///! Queriable widget
-pub struct QWidgetRaw {
+struct QWidgetRaw {
     localname : Rc<String>,
     classes : Vec<Rc<String>>,
     parent : Option< QWidget >,
@@ -38,6 +45,7 @@ pub struct QWidgetRaw {
     //attribute : Attributes,
     childs : Vec< QWidget >
 }
+
 
 pub trait Queriable {
     fn find(&self, q:&str) -> QueryChain;
@@ -48,12 +56,12 @@ pub trait Queriable {
 impl Queriable for QWidget {
     fn find(&self, q:&str) -> QueryChain {
         //find in self
-        QueryChain { queried : vec![ QWidget(self.0.clone()) ] }
+        QueryChain ( vec![ QWidget(self.0.clone()) ] )
     }
 
     fn q(&self, q:&str) -> QueryChain {
         //find in root
-        QueryChain { queried : vec![ QWidget(self.0.clone()) ] }
+        QueryChain ( vec![ QWidget(self.0.clone()) ] ).q( q )
     }
 
     fn root(&self) -> QueryChain {
@@ -66,47 +74,91 @@ impl Queriable for QWidget {
                 break
             }
         }
-        QueryChain { queried : vec![ QWidget(parent) ] }
+        QueryChain ( vec![ QWidget(parent) ] )
     }
 }
 
 impl Widget<JSValue> for QWidget {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut JSValue, env: &Env) {
-        self.borrow_mut().event(ctx, event, data, env)
+        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
+            origin.event(ctx, event, data, env);
+        }
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &JSValue, env: &Env) {
-        self.borrow_mut().lifecycle(ctx, event, data, env);
+        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
+            origin.lifecycle(ctx, event, data, env);
+        }
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx, old_data: &JSValue, data: &JSValue, env: &Env) {
-        self.borrow_mut().update(ctx, old_data, data, env);
+        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
+            origin.update(ctx, old_data, data, env);
+        }
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &JSValue, env: &Env) -> Size {
-        self.borrow_mut().layout(ctx, bc, data, env)
+        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
+            origin.layout(ctx, bc, data, env)
+        } else {
+            Default::default()
+        }
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &JSValue, env: &Env) {
-        self.borrow_mut().paint(ctx, data, env);
+        //TODO : DrawableStack
+        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
+            origin.paint(ctx, data, env);
+        }
     }
 
     fn id(&self) -> Option<WidgetId> {
-        self.borrow().id()
+        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
+            origin.id()
+        } else {
+            None
+        }
     }
 
     fn type_name(&self) -> &'static str {
-        self.borrow().type_name()
+        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
+            origin.type_name()
+        } else {
+            "qwidget"
+        }
     }
 }
 
-pub struct QueryChain {
-    queried : Vec<QWidget>
+pub struct QueryChain(Vec<QWidget>);
+
+impl From<Vec<QWidget>> for QueryChain {
+    fn from(value: Vec<QWidget>) -> Self {
+        Self(value)
+    }
+}
+
+impl Deref for QueryChain {
+    type Target = [QWidget];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
 }
 
 
 impl QueryChain {
+    pub fn q(&self, q:&str) -> QueryChain {
+        let mut chain = vec![];
+        self.iter().for_each(|e| {
+            chain.extend( e.q(q).into_iter().map( |qw| qw.clone() ) );
+        });
+        QueryChain::from(chain)
+    }
+
     pub fn set_class(&self, cls:&str) -> QueryChain {
+        // self.iter().for_each( |e| {
+        //     e.set_class( cls );
+        // })
         todo!()
     }
 
@@ -115,10 +167,6 @@ impl QueryChain {
     }
 
     pub fn remove_class(&self, cls:&str) -> QueryChain {
-        todo!()
-    }
-
-    pub fn trigger_class(&self, cls:&str) -> QueryChain {
         todo!()
     }
 
@@ -186,6 +234,24 @@ impl QueryChain {
         todo!()
     }
 
+    pub fn remove(&self) {
+        // self.iter().for_each( |e| {
+        //     let addr = e.0.get();
+        //     let q_raw = unsafe { &mut *e.0.get() };
+        //     if let Some(parent) = q_raw.parent.as_mut() {
+        //         let parent_origin = unsafe { (*parent.0.get()).origin };
+        //         if let Some(parent_origin) = parent_origin {
+        //             parent_origin.
+        //         }
+        //         let mut childs = unsafe { &mut (&mut *parent.0.get()).childs };
+        //     }
+        //     if let Some(origin) = unsafe { (&*e.0.get()).origin } {
+                
+        //     }
+        // });
+        todo!()
+    }
+
     pub fn show(&self) -> usize {
         todo!()
     }
@@ -202,53 +268,11 @@ impl QueryChain {
         todo!()
     }
 
-    pub fn val(&self) -> Option<&Value> {
+    pub fn val(&self, new:Option<JSValue>) -> Option<&JSValue> {
         //json value
         todo!()
     }
 
-}
-
-pub enum Drawable {
-    Oval,
-    Circle,
-    Rect,
-    RoundedRect,
-    Line,
-    Image,
-    Text
-}
-
-pub struct OvalParam {
-    //color, fill_color, radius, fill
-}
-
-pub struct CircleParam {
-    //color, fill_color, radius, color
-}
-
-pub struct RectParam {
-    //color, fill_color, width, height
-}
-
-pub struct RoundedRectParam {
-    //color, fill_color, round, width, height
-}
-
-pub struct LineParam {
-    //color, sx,sy,ex,ey
-}
-
-pub struct BezierParam {
-    //color, sx,sy,ex,ey
-}
-
-pub struct ImageParam {
-    //src, object-fit, image-rendering
-}
-
-pub struct TextParam {
-    //color, text, font-size
 }
 
 

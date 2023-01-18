@@ -1,6 +1,6 @@
 mod flex;
 mod qwidget;
-mod drawable;
+pub mod drawable;
 
 
 // mod qwidget;
