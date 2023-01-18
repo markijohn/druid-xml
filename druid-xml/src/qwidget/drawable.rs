@@ -27,11 +27,84 @@ impl Default for BorderStyle {
 #[derive(Clone,Copy)]
 pub enum Number {
     Abs(u64), //absolute position
-    Rel(f64) //relative position
+    Rel(f64), //relative position
+    Calc(SimpleCalc)
 }
 
 #[derive(Clone,Debug)]
 pub struct InvalidNumberError;
+
+#[derive(Clone,Copy)]
+enum CalcOp {
+    Add,
+    Multiply
+}
+
+#[derive(Clone,Copy)]
+//https://developer.mozilla.org/ko/docs/Web/CSS/calc
+//not support full spec
+pub struct SimpleCalc {
+    rel : f64,
+    op : CalcOp,
+    abs : f64,
+}
+
+impl SimpleCalc {
+    pub fn parse(s:&str) -> Result<Self,InvalidNumberError> {
+        let s = s.trim();
+        if s.starts_with("calc(") && s.ends_with(")") {
+            let mut split = s.split_whitespace();
+            let rel = split.next().ok_or_else(|| InvalidNumberError)?;
+            let op = split.next().ok_or_else(|| InvalidNumberError)?;
+            let abs = split.next().ok_or_else(|| InvalidNumberError)?;
+
+            let (rel,is_rel) = if rel.ends_with('%') {
+                (rel[..rel.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64, true)
+            } else if rel.find('.').is_some() {
+                (rel.parse::<f64>().map_err( |_| InvalidNumberError )?, true)
+            } else {
+                (rel.parse::<f64>().map_err( |_| InvalidNumberError )?, false)
+            };
+
+            let (rel,op,abs) = if is_rel {
+                let abs = abs.parse::<f64>().map_err( |_| InvalidNumberError )?;
+                match op {
+                    "+" => (rel, CalcOp::Add, abs),
+                    "-" => (rel, CalcOp::Add, -abs),
+                    "*" => (rel, CalcOp::Multiply, abs),
+                    "/" => (rel, CalcOp::Multiply, abs / (abs.log10().floor()+1f64) ),
+                    _ => return Err(InvalidNumberError)
+                }
+            } else {
+                let _abs = rel;
+                let rel = if abs.ends_with('%') {
+                    abs.parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64
+                } else if abs.find('.').is_some() {
+                    abs[..abs.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )?
+                } else {
+                    return Err(InvalidNumberError)
+                };
+                match op {
+                    "+" => (rel, CalcOp::Add, _abs),
+                    "-" => (rel, CalcOp::Add, -_abs),
+                    "*" => (rel, CalcOp::Multiply, _abs),
+                    "/" => (rel, CalcOp::Multiply, _abs / (_abs.log10().floor()+1f64) ),
+                    _ => return Err(InvalidNumberError)
+                }
+            };
+            Ok( Self {rel, op, abs} )
+        } else {
+            Err(InvalidNumberError)
+        }
+    }
+
+    pub fn calc(&self, size:f64) -> f64 {
+        match self.op {
+            CalcOp::Add => self.rel + (self.abs*size),
+            CalcOp::Multiply => self.rel * (self.abs*size)
+        }
+    }
+}
 
 impl Number {
     pub fn as_u64(&self) -> Option<u64> {
@@ -66,10 +139,11 @@ impl Number {
         }
     }
 
-    pub fn calc_rate(&self, size:f64) -> f64 {
+    pub fn calc(&self, size:f64) -> f64 {
         match self {
             Number::Abs(v) => *v as _,
             Number::Rel(v) => size * *v,
+            Number::Calc(v) => v.calc(size)
         }
     }
 }
@@ -78,7 +152,9 @@ impl FromStr for Number {
     type Err = InvalidNumberError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let v = if s.find('.').is_some() {
+        let v = if let Ok(calc) = SimpleCalc::parse(s) {
+            Self::Calc(calc)
+        } else if s.find('.').is_some() {
             Self::Rel( s.parse::<f64>().map_err( |_| InvalidNumberError )? )
         } else if s.ends_with('%') {
             Self::Rel( s[..s.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64 )
@@ -128,7 +204,7 @@ impl QPoint {
     }
 
     pub fn calc_rate(&self, width:f64, height:f64) -> (f64,f64) {
-        ( self.x.calc_rate( width) , self.y.calc_rate( height) )
+        ( self.x.calc( width) , self.y.calc( height) )
     }
 }
 
@@ -167,7 +243,7 @@ pub enum Drawable {
     //start: top left
     //end: padding : top right bottom left
     //size : x , y
-    Rect{ start:QPoint, end:PointEnd, border:Option<BorderStyle>, round:Option<RoundedRectRadii>, fill:FillMethod },
+    Rect{ top:Number, right:Number, bottom:Number, left:Number, border:Option<BorderStyle>, round:Option<RoundedRectRadii>, fill:FillMethod },
 
     Circle{ center:QPoint, radius:f64, border:Option<BorderStyle>, fill:FillMethod},
 
@@ -192,9 +268,9 @@ impl DrawableStack {
         let mut last_point = (0., 0.);
         let mut last_style = Default::default();
         for d in self.0.iter() {
-            
             let bounds = ctx.size().to_rect();
-            
+            let width = bounds.width();
+            let height = bounds.height();
             macro_rules! draw {
                 ($fill:ident, $shape:ident, $border:ident) => {
                     match $fill {
@@ -210,15 +286,13 @@ impl DrawableStack {
             }
             
             match d {
-                Drawable::Rect { start, end, border, round, fill  } => {
-                    let start = start.calc_rate( bounds.width(), bounds.height() );
-                    let end = end.calc( start, bounds.width(), bounds.height() );
-                    let round = round.unwrap_or( RoundedRectRadii { top_left: 0., top_right: 0., bottom_right: 0., bottom_left: 0. });
-                    let rect = RoundedRect::new( start.0, start.1, end.0, end.1, round );
+                Drawable::Rect { top, right, bottom, left, border, round, fill  } => {
+                    let round = round.unwrap_or( Default::default() );
+                    let rect = RoundedRect::new( left.calc(width), top.calc(height), right.calc(width), bottom.calc(height), round );
                     draw!(fill, rect, border);
                 },
                 Drawable::Circle { center, radius, border, fill } => {
-                    let circle = Circle::new( center.calc_rate(bounds.width(), bounds.height()), *radius);
+                    let circle = Circle::new( center.calc_rate(width, height), *radius);
                     draw!(fill, circle, border);
                 },
                 Drawable::Ellipse { center, border, elli, fill } => {
