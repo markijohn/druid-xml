@@ -237,7 +237,9 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         };
         ( $widget:ident, "color" ) => {
             if let Some(value) = get_style!("color") {
-                $widget.set_text_color( color::to_color(value, Some(Color::rgb8(0,0,0)) ) );
+                $widget.with_text_color( color::to_color(value, Some(Color::rgb8(0,0,0)) ) )
+            } else {
+                $widget
             }
         };
         ( $widget:ident, "font-size" ) => {
@@ -257,7 +259,9 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
                     [val @ .. , b'%'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap_or(13.333f64),
                     val @ _ => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
                 };
-                $widget.set_text_size( font_size )
+                $widget.with_text_size( font_size )
+            } else {
+                $widget
             }
         };
         ( $widget:ident, "border" ) => {
@@ -280,12 +284,14 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         ( $widget:ident, "text-align" ) => {
             if let Some(v) = get_style!("text-align") {
                 match v {
-                    "left" => $widget.set_text_alignment(TextAlignment::Start),
-                    "right" => $widget.set_text_alignment(TextAlignment::End),
-                    "center" => $widget.set_text_alignment(TextAlignment::Center),
-                    "justify" => $widget.set_text_alignment(TextAlignment::Justified),
+                    "left" => $widget.with_text_alignment(TextAlignment::Start),
+                    "right" => $widget.with_text_alignment(TextAlignment::End),
+                    "center" => $widget.with_text_alignment(TextAlignment::Center),
+                    "justify" => $widget.with_text_alignment(TextAlignment::Justified),
                     _ => return Err( Error::InvalidAttributeValue((0,"text-align")) )
                 }
+            } else {
+                $widget
             }
         };
 
@@ -424,9 +430,9 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
             &text
         };
         let mut label = druid::widget::Label::new( label_text );
-        style!(label, "color");
-        style!(label, "font-size");
-        style!(label, "text-align");
+        label = style!(label, "color");
+        label = style!(label, "font-size");
+        label = style!(label, "text-align");
 
         if let Some(lbk) = attrs.get(b"line-break") {
             match lbk.as_ref() {
@@ -457,10 +463,14 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     //TODO : password type?
     else if tag == "textbox" || (tag == "input" && input_type == "text") {
         tag_wrap = "textbox";
-        let mut textbox = druid::widget::TextBox::new();
-        style!(textbox, "color");
-        style!(textbox, "font-size");
-        style!(textbox, "text-align");
+        let mut textbox = if let Some(Cow::Borrowed(b"true")) = attrs.get(b"multiline") {
+            druid::widget::TextBox::multiline()
+        } else {
+            druid::widget::TextBox::new()
+        };
+        textbox = style!(textbox, "color");
+        textbox = style!(textbox, "font-size");
+        textbox = style!(textbox, "text-align");
 
         if let Some(placeholder) = attrs.get_as::<String>(b"placeholder") {
             textbox.set_placeholder(placeholder);

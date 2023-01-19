@@ -34,13 +34,14 @@ pub enum Number {
 #[derive(Clone,Debug)]
 pub struct InvalidNumberError;
 
-#[derive(Clone,Copy)]
+#[derive(Debug,Clone,Copy)]
 enum CalcOp {
     Add,
-    Multiply
+    Multiply,
+    Divide
 }
 
-#[derive(Clone,Copy)]
+#[derive(Debug,Clone,Copy)]
 //https://developer.mozilla.org/ko/docs/Web/CSS/calc
 //not support full spec
 pub struct SimpleCalc {
@@ -53,7 +54,7 @@ impl SimpleCalc {
     pub fn parse(s:&str) -> Result<Self,InvalidNumberError> {
         let s = s.trim();
         if s.starts_with("calc(") && s.ends_with(")") {
-            let mut split = s.split_whitespace();
+            let mut split = s[5 .. s.rfind(')').unwrap()].split_whitespace();
             let rel = split.next().ok_or_else(|| InvalidNumberError)?;
             let op = split.next().ok_or_else(|| InvalidNumberError)?;
             let abs = split.next().ok_or_else(|| InvalidNumberError)?;
@@ -66,29 +67,31 @@ impl SimpleCalc {
                 (rel.parse::<f64>().map_err( |_| InvalidNumberError )?, false)
             };
 
+            
             let (rel,op,abs) = if is_rel {
                 let abs = abs.parse::<f64>().map_err( |_| InvalidNumberError )?;
                 match op {
                     "+" => (rel, CalcOp::Add, abs),
                     "-" => (rel, CalcOp::Add, -abs),
                     "*" => (rel, CalcOp::Multiply, abs),
-                    "/" => (rel, CalcOp::Multiply, abs / (abs.log10().floor()+1f64) ),
+                    //"/" => (rel, CalcOp::Multiply, abs / 10f64.powi( (abs.log10().floor()+1f64) as _ ) ),
+                    "/" => (rel, CalcOp::Multiply, 1f64 / abs ),
                     _ => return Err(InvalidNumberError)
                 }
             } else {
                 let _abs = rel;
                 let rel = if abs.ends_with('%') {
-                    abs.parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64
+                    abs[..abs.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64
                 } else if abs.find('.').is_some() {
-                    abs[..abs.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )?
+                    abs.parse::<f64>().map_err( |_| InvalidNumberError )?
                 } else {
                     return Err(InvalidNumberError)
                 };
                 match op {
                     "+" => (rel, CalcOp::Add, _abs),
-                    "-" => (rel, CalcOp::Add, -_abs),
+                    "-" => (-rel, CalcOp::Add, _abs),
                     "*" => (rel, CalcOp::Multiply, _abs),
-                    "/" => (rel, CalcOp::Multiply, _abs / (_abs.log10().floor()+1f64) ),
+                    "/" => (rel, CalcOp::Divide, _abs ),
                     _ => return Err(InvalidNumberError)
                 }
             };
@@ -100,8 +103,9 @@ impl SimpleCalc {
 
     pub fn calc(&self, size:f64) -> f64 {
         match self.op {
-            CalcOp::Add => self.rel + (self.abs*size),
-            CalcOp::Multiply => self.rel * (self.abs*size)
+            CalcOp::Add => self.rel*size + self.abs,
+            CalcOp::Multiply => self.rel * size * self.abs,
+            CalcOp::Divide => self.abs / ( self.rel * size )
         }
     }
 }
@@ -321,5 +325,50 @@ impl DrawableStack {
             }
         );
         BackgroundBrush::Painter( druid::widget::Painter::<T>::new(painter_fn) )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::SimpleCalc;
+
+    #[test]
+    fn calc_test() {
+        //add
+        let calc = SimpleCalc::parse("calc(90% + 20)").unwrap();
+        println!("{:?} {}", calc, calc.calc(100.));
+        assert!( calc.calc(100.) == 110. );
+        //add reverse
+        let calc = SimpleCalc::parse("calc(20 + 90%)").unwrap();
+        println!("{:?} {}", calc, calc.calc(200.));
+        assert!( calc.calc(200.) == 200. );
+
+        //minus 
+        let calc = SimpleCalc::parse("calc(100% - 50)").unwrap();
+        println!("{:?} {}", calc, calc.calc(200.));
+        assert!( calc.calc(200.) == 150. );
+        //minus reverse
+        let calc = SimpleCalc::parse("calc(200 - 100%)").unwrap();
+        println!("{:?} {}", calc, calc.calc(100.));
+        assert!( calc.calc(100.) == 100. );
+
+        //multiply
+        let calc = SimpleCalc::parse("calc(15% * 20)").unwrap();
+        println!("{:?} {}", calc, calc.calc(100.));
+        assert!( calc.calc(100.) == 300. );
+        //multiply reverse
+        let calc = SimpleCalc::parse("calc(20 * 15%)").unwrap();
+        println!("{:?} {}", calc, calc.calc(100.));
+        assert!( calc.calc(100.) == 300. );
+
+        //divide
+        let calc = SimpleCalc::parse("calc(100% / 2)").unwrap();
+        println!("{:?} {}", calc, calc.calc(648.));
+        assert!( calc.calc(648.) == 324. );
+        //divide reverse
+        let calc = SimpleCalc::parse("calc(640 / 40%)").unwrap();
+        println!("{:?} {}", calc, calc.calc(10.));
+        assert!( calc.calc(10.) == 160. );
+        
     }
 }

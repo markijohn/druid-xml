@@ -16,8 +16,10 @@ fn main() {
 
 		//Rounded fill
 		Drawable::Rect {
-			start: QPoint::from("0","0").unwrap(), 
-			end: PointEnd::RightBottom( QPoint::from("0","0").unwrap() ), 
+			top:Number::Abs(0),
+			right:Number::Rel(1f64),
+			bottom:Number::Rel(1f64),
+			left:Number::Calc(SimpleCalc::parse("calc(100% - 20)").unwrap()),
 			border: Some(BorderStyle::new(
 				StrokeStyle{ line_join: Default::default(), line_cap: Default::default(), dash_pattern: Default::default(), dash_offset: 0.5 } ,
 				2f64,
