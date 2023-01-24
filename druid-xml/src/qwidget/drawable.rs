@@ -4,6 +4,7 @@ use druid::RoundedRectRadii;
 use druid::{Point,Size,Insets,Color,LinearGradient,RadialGradient, Widget, PaintCtx, Env, widget::BackgroundBrush, RenderContext};
 use druid::kurbo::{Line, Circle, Arc, RoundedRect, Ellipse};
 use druid::piet::StrokeStyle;
+use fasteval2::{Instruction, Slab, Evaler, Compiler};
 use std::str::FromStr;
 
 #[derive(Clone)]
@@ -25,127 +26,82 @@ impl Default for BorderStyle {
     }
 }
 
-#[derive(Debug,Clone,Copy)]
-enum CalcOp {
-    Add,
-    Multiply,
-    Divide
+pub struct Calculator {
+    src : String,
+    cached : (Instruction,Slab),
 }
 
-#[derive(Debug,Clone,Copy)]
-//https://developer.mozilla.org/ko/docs/Web/CSS/calc
-//not support full spec
-pub struct SimpleCalc {
-    rel : f64,
-    op : CalcOp,
-    abs : f64,
-}
-
-impl SimpleCalc {
-    pub fn parse(s:&str) -> Result<Self,InvalidNumberError> {
-        let mut split = s[5 .. s.rfind(')').unwrap()].split_whitespace();
-        let rel = split.next().ok_or_else(|| InvalidNumberError)?;
-        let op = split.next().ok_or_else(|| InvalidNumberError)?;
-        let abs = split.next().ok_or_else(|| InvalidNumberError)?;
-
-        let (rel,is_rel) = if rel.ends_with('%') {
-            (rel[..rel.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64, true)
-        } else if rel.find('.').is_some() {
-            (rel.parse::<f64>().map_err( |_| InvalidNumberError )?, true)
-        } else {
-            (rel.parse::<f64>().map_err( |_| InvalidNumberError )?, false)
-        };
-
-        
-        let (rel,op,abs) = if is_rel {
-            let abs = abs.parse::<f64>().map_err( |_| InvalidNumberError )?;
-            match op {
-                "+" => (rel, CalcOp::Add, abs),
-                "-" => (rel, CalcOp::Add, -abs),
-                "*" => (rel, CalcOp::Multiply, abs),
-                //"/" => (rel, CalcOp::Multiply, abs / 10f64.powi( (abs.log10().floor()+1f64) as _ ) ),
-                "/" => (rel, CalcOp::Multiply, 1f64 / abs ),
-                _ => return Err(InvalidNumberError)
-            }
-        } else {
-            let _abs = rel;
-            let rel = if abs.ends_with('%') {
-                abs[..abs.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64
-            } else if abs.find('.').is_some() {
-                abs.parse::<f64>().map_err( |_| InvalidNumberError )?
-            } else {
-                return Err(InvalidNumberError)
-            };
-            match op {
-                "+" => (rel, CalcOp::Add, _abs),
-                "-" => (-rel, CalcOp::Add, _abs),
-                "*" => (rel, CalcOp::Multiply, _abs),
-                "/" => (rel, CalcOp::Divide, _abs ),
-                _ => return Err(InvalidNumberError)
-            }
-        };
-        Ok( Self {rel, op, abs} )
+impl Calculator {
+    pub fn new(src:String) -> Result<Self, InvalidNumberError> {
+        let mut slab = fasteval2::Slab::new();
+        let compiled = fasteval2::Parser::new()
+            .parse(&src, &mut slab.ps)
+            .map_err( |_| InvalidNumberError )?
+            .from(&slab.ps).compile(&slab.ps, &mut slab.cs, &mut fasteval2::EmptyNamespace);
+        Ok( Self { src, cached : (compiled, slab) } )
     }
 
-    pub fn calc(&self, size:f64) -> f64 {
-        match self.op {
-            CalcOp::Add => self.rel*size + self.abs,
-            CalcOp::Multiply => self.rel * size * self.abs,
-            CalcOp::Divide => self.abs / ( self.rel * size )
-        }
+    pub fn calc(&self, cvar:&mut CalcVars) -> f64 {
+        let (inst,slab) = &self.cached;
+        inst.eval(&slab, cvar).unwrap()
     }
 }
+
+impl Clone for Calculator {
+    fn clone(&self) -> Self {
+        Self::new( self.src.clone() ).unwrap()
+    }
+}
+
 
 #[derive(Clone)]
 pub enum Number {
     Abs(u64), //absolute position
     Rel(f64), //relative position
-    SimpleCalc(SimpleCalc),
-    Calc(String) //https://developer.mozilla.org/ko/docs/Web/CSS/calc
+    Calc( Calculator ) //https://developer.mozilla.org/ko/docs/Web/CSS/calc
 }
 
 #[derive(Clone,Debug)]
 pub struct InvalidNumberError;
 
 impl Number {
-    pub fn as_u64(&self) -> Option<u64> {
-        if let Self::Abs(v) = self {
-            Some(*v)
-        } else {
-            None
-        }
-    }
+    // pub fn as_u64(&self) -> Option<u64> {
+    //     if let Self::Abs(v) = self {
+    //         Some(*v)
+    //     } else {
+    //         None
+    //     }
+    // }
 
-    pub fn as_u64_or(&self, def:u64) -> u64 {
-        if let Self::Abs(v) = self {
-            *v
-        } else {
-            def
-        }
-    }
+    // pub fn as_u64_or(&self, def:u64) -> u64 {
+    //     if let Self::Abs(v) = self {
+    //         *v
+    //     } else {
+    //         def
+    //     }
+    // }
 
-    pub fn as_f64(&self) -> Option<f64> {
-        if let Self::Rel(v) = self {
-            Some(*v)
-        } else {
-            None
-        }
-    }
+    // pub fn as_f64(&self) -> Option<f64> {
+    //     if let Self::Rel(v) = self {
+    //         Some(*v)
+    //     } else {
+    //         None
+    //     }
+    // }
 
-    pub fn as_f64_or(&self, def:f64) -> f64 {
-        if let Self::Rel(v) = self {
-            *v
-        } else {
-            def
-        }
-    }
+    // pub fn as_f64_or(&self, def:f64) -> f64 {
+    //     if let Self::Rel(v) = self {
+    //         *v
+    //     } else {
+    //         def
+    //     }
+    // }
 
     pub fn calc(&self, vars:&mut CalcVars) -> f64 {
         match self {
             Number::Abs(v) => *v as _,
             Number::Rel(v) => *v * vars.base_size(),
-            Number::SimpleCalc(calc) => calc.calc( vars.base_size() ),
-            Number::Calc(v) => fasteval2::ez_eval(v, vars).unwrap()
+            Number::Calc(v) => v.calc(vars)
         }
     }
 }
@@ -154,9 +110,22 @@ impl FromStr for Number {
     type Err = InvalidNumberError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use std::fmt::Write;
         let s = s.trim();
         let v = if s.starts_with("calc(") && s.ends_with(')') {
-            Self::Calc( s[5 .. s.len()-1].to_string() )
+            let splits = s[5 .. s.len()-1].split( '%');
+            let mut expr_str:String = String::new();
+            splits.for_each( |e| {
+                if e.ends_with("%") 
+                && e.len() > 1 
+                && e.chars().rev().skip(1).next().unwrap().is_numeric() {
+                    let s = e[..e.len()-1].rfind( |c:char| !c.is_numeric() ).unwrap_or(0);
+                    write!(&mut expr_str, "__size_perc_{}", &e[s .. e.len()-1].parse::<f64>().unwrap() / 100f64 ).unwrap();
+                } else {
+                    expr_str.push_str( e );
+                }
+            });
+            Self::Calc( Calculator::new( expr_str )? )
         } else if s.find('.').is_some() {
             Self::Rel( s.parse::<f64>().map_err( |_| InvalidNumberError )? )
         } else if s.ends_with('%') {
@@ -265,8 +234,8 @@ impl fasteval2::evalns::EvalNamespace for CalcVars {
             "sum" => Some(args.into_iter().fold(0.0, |s, f| s + f)),
 
             _ => {
-                if name.starts_with("__inner_perc_") {
-                    Some( name[ "__inner_perc_".len() .. ].parse::<f64>().unwrap() * self.base_size() )
+                if name.starts_with("__size_perc_") {
+                    Some( name[ "__size_perc_".len() .. ].parse::<f64>().unwrap() * self.base_size() )
                 } else {
                     None
                 }
@@ -313,6 +282,7 @@ impl DrawableStack {
     }
 
     pub fn draw(&self, ctx:&mut PaintCtx) {
+        println!("Called draw");
         let mut last_point = (0., 0.);
         let mut last_style = Default::default();
         let bounds = ctx.size().to_rect();
@@ -375,82 +345,3 @@ impl DrawableStack {
     }
 }
 
-
-
-#[cfg(test)]
-mod test {
-    use super::SimpleCalc;
-
-    #[test]
-    fn simple_calc_test() {
-        //add
-        let calc = SimpleCalc::parse("calc(90% + 20)").unwrap();
-        println!("{:?} {}", calc, calc.calc(100.));
-        assert!( calc.calc(100.) == 110. );
-        //add reverse
-        let calc = SimpleCalc::parse("calc(20 + 90%)").unwrap();
-        println!("{:?} {}", calc, calc.calc(200.));
-        assert!( calc.calc(200.) == 200. );
-
-        //minus 
-        let calc = SimpleCalc::parse("calc(100% - 50)").unwrap();
-        println!("{:?} {}", calc, calc.calc(200.));
-        assert!( calc.calc(200.) == 150. );
-        //minus reverse
-        let calc = SimpleCalc::parse("calc(200 - 100%)").unwrap();
-        println!("{:?} {}", calc, calc.calc(100.));
-        assert!( calc.calc(100.) == 100. );
-
-        //multiply
-        let calc = SimpleCalc::parse("calc(15% * 20)").unwrap();
-        println!("{:?} {}", calc, calc.calc(100.));
-        assert!( calc.calc(100.) == 300. );
-        //multiply reverse
-        let calc = SimpleCalc::parse("calc(20 * 15%)").unwrap();
-        println!("{:?} {}", calc, calc.calc(100.));
-        assert!( calc.calc(100.) == 300. );
-
-        //divide
-        let calc = SimpleCalc::parse("calc(100% / 2)").unwrap();
-        println!("{:?} {}", calc, calc.calc(648.));
-        assert!( calc.calc(648.) == 324. );
-        //divide reverse
-        let calc = SimpleCalc::parse("calc(640 / 40%)").unwrap();
-        println!("{:?} {}", calc, calc.calc(10.));
-        assert!( calc.calc(10.) == 160. );
-        
-    }
-
-    #[test]
-    fn test() {
-        let mut cb = |name: &str, args: Vec<f64>| -> Option<f64> {
-            let mydata: [f64; 3] = [11.1, 22.2, 33.3];
-            match name {
-                // Custom constants/variables:
-                "x" => Some(3.0),
-                "y" => Some(4.0),
-                "100%" => Some(100.0),
-    
-                // Custom function:
-                "sum" => Some(args.into_iter().fold(0.0, |s, f| s + f)),
-    
-                // Custom array-like objects:
-                // The `args.get...` code is the same as:
-                //     mydata[args[0] as usize]
-                // ...but it won't panic if either index is out-of-bounds.
-                "data" => args.get(0).and_then(|f| mydata.get(*f as usize).copied()),
-    
-                // A wildcard to handle all undefined names:
-                _ => None,
-            }
-        };
-    
-        let val = fasteval2::ez_eval("sum(x^2, y^2)^0.5 + data[0] ", &mut cb).unwrap();
-        //                           |   |                   |
-        //                           |   |                   square-brackets act like parenthesis
-        //                           |   variables are like custom functions with zero args
-        //                           custom function
-    
-        assert_eq!(val, 16.1);
-    }
-}
