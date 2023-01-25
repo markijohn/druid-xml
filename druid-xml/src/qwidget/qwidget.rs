@@ -41,7 +41,7 @@ struct QWidgetRaw {
     localname : Rc<String>,
     classes : Vec<Rc<String>>,
     parent : Option< QWidget >,
-    origin : Option<Box<dyn Widget<Value>>>,
+    origin : Option<Box<dyn Widget<JSValue>>>,
     //attribute : Attributes,
     childs : Vec< QWidget >
 }

@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use druid::RoundedRectRadii;
+use druid::{RoundedRectRadii, Vec2};
 use druid::{Point,Size,Insets,Color,LinearGradient,RadialGradient, Widget, PaintCtx, Env, widget::BackgroundBrush, RenderContext};
-use druid::kurbo::{Line, Circle, Arc, RoundedRect, Ellipse};
-use druid::piet::StrokeStyle;
+use druid::kurbo::{Line, Circle, Arc, RoundedRect, Ellipse, Shape};
+use druid::piet::{StrokeStyle, IntoBrush};
 use fasteval2::{Instruction, Slab, Evaler, Compiler};
 use std::str::FromStr;
 
@@ -56,7 +56,7 @@ impl Clone for Calculator {
 
 #[derive(Clone)]
 pub enum Number {
-    Abs(u64), //absolute position
+    Abs(f64), //absolute position
     Rel(f64), //relative position
     Calc( Calculator ) //https://developer.mozilla.org/ko/docs/Web/CSS/calc
 }
@@ -65,41 +65,9 @@ pub enum Number {
 pub struct InvalidNumberError;
 
 impl Number {
-    // pub fn as_u64(&self) -> Option<u64> {
-    //     if let Self::Abs(v) = self {
-    //         Some(*v)
-    //     } else {
-    //         None
-    //     }
-    // }
-
-    // pub fn as_u64_or(&self, def:u64) -> u64 {
-    //     if let Self::Abs(v) = self {
-    //         *v
-    //     } else {
-    //         def
-    //     }
-    // }
-
-    // pub fn as_f64(&self) -> Option<f64> {
-    //     if let Self::Rel(v) = self {
-    //         Some(*v)
-    //     } else {
-    //         None
-    //     }
-    // }
-
-    // pub fn as_f64_or(&self, def:f64) -> f64 {
-    //     if let Self::Rel(v) = self {
-    //         *v
-    //     } else {
-    //         def
-    //     }
-    // }
-
     pub fn calc(&self, vars:&mut CalcVars) -> f64 {
         match self {
-            Number::Abs(v) => *v as _,
+            Number::Abs(v) => *v,
             Number::Rel(v) => *v * vars.base_size(),
             Number::Calc(v) => v.calc(vars)
         }
@@ -131,7 +99,7 @@ impl FromStr for Number {
         } else if s.ends_with('%') {
             Self::Rel( s[..s.len()-1].parse::<f64>().map_err( |_| InvalidNumberError )? / 100f64 )
         } else {
-            Self::Abs( s.parse::<u64>().map_err( |_| InvalidNumberError )?  )
+            Self::Abs( s.parse::<f64>().map_err( |_| InvalidNumberError )?  )
         };
         Ok( v )
     }
@@ -152,31 +120,22 @@ pub enum FillMethod {
 }
 
 #[derive(Clone)]
-pub enum Pos {
-    TopLeft{ x:f64, y:f64 },
-    TopCenter { x:f64, y : f64 },
-    TopRight { x:f64, y : f64 },
-    CenterLeft { x:f64, y : f64 },
-    Center { x:f64, y : f64 },
-    CenterRight { x:f64, y : f64 },
-    BottomLeft { x:f64, y : f64 },
-    BottomCenter { x:f64, y : f64 },
-    BottomRight { x:f64, y : f64 }
-}
-
-#[derive(Clone)]
-pub struct QPoint {
+pub struct QVec2 {
     x : Number,
     y : Number
 }
 
-impl QPoint {
+impl QVec2 {
     pub fn from(x:&str, y:&str) -> Result<Self,InvalidNumberError> {
         Ok( Self { x:Number::from_str(x)?, y:Number::from_str(y)? } )
     }
 
     pub fn calc(&self, map:&mut CalcVars) -> (f64,f64) {
         ( self.x.calc( map) , self.y.calc( map) )
+    }
+
+    pub fn to_vec2(&self, map:&mut CalcVars) -> Vec2 {
+        Vec2::new( self.x.calc( map) , self.y.calc( map) )
     }
 }
 
@@ -185,14 +144,13 @@ pub struct CalcVars {
     width : f64,
     height : f64,
     time : f64,
-    is_width_base : bool,
-    buf : String
+    is_width_base : bool
 }
 
 impl CalcVars {
     pub fn new(width:f64, height:f64, time:f64, is_width_base:bool) -> Self {
         Self {
-            width, height, time, is_width_base, buf : String::new()
+            width, height, time, is_width_base
         }
     }
 
@@ -221,8 +179,7 @@ impl CalcVars {
 
 impl fasteval2::evalns::EvalNamespace for CalcVars {
     //more advanced function : https://github.com/izihawa/fasteval2/blob/master/examples/advanced-vars.rs
-    fn lookup(&mut self, name: &str, args: Vec<f64>, keybuf: &mut String) -> Option<f64> {
-        let mydata: [f64; 3] = [11.1, 22.2, 33.3];
+    fn lookup(&mut self, name: &str, _args: Vec<f64>, _keybuf: &mut String) -> Option<f64> {
         match name {
             // Custom constants/variables:
             "width" => Some(self.width),
@@ -231,7 +188,7 @@ impl fasteval2::evalns::EvalNamespace for CalcVars {
             "size" => Some(self.base_size()),
 
             // Custom function:
-            "sum" => Some(args.into_iter().fold(0.0, |s, f| s + f)),
+            // "sum" => Some(args.into_iter().fold(0.0, |s, f| s + f)),
 
             _ => {
                 if name.starts_with("__size_perc_") {
@@ -240,8 +197,6 @@ impl fasteval2::evalns::EvalNamespace for CalcVars {
                     None
                 }
             }
-
-            _ => None,
         }
     }
 }
@@ -262,16 +217,16 @@ pub enum Drawable {
     //size : x , y
     Rect{ top:Number, right:Number, bottom:Number, left:Number, border:Option<BorderStyle>, round:Option<RoundedRectRadii>, fill:FillMethod },
 
-    Circle{ center:QPoint, radius:f64, border:Option<BorderStyle>, fill:FillMethod},
+    Circle{ center:QVec2, radius:Number, border:Option<BorderStyle>, fill:FillMethod},
 
-    Ellipse{ center:QPoint, border:Option<BorderStyle>, elli:Ellipse, fill:FillMethod },
+    Ellipse{ center:QVec2, radi:QVec2, x_rot:Number, border:Option<BorderStyle>, fill:FillMethod },
 
-    Arc { pos:QPoint, border:BorderStyle, arc:Arc },
+    Arc { center:QVec2, radi:QVec2, start_angle:Number, sweep_angle:Number, x_rot:Number, border:BorderStyle},
 
     //Absolute line
     //start : absolute start point
     //end : absolute end point
-    Line{ start:Option<QPoint>, end:QPoint, style:Option<BorderStyle> }
+    Line{ start:Option<QVec2>, end:QVec2, style:Option<BorderStyle> }
 }
 
 pub struct DrawableStack(Vec<Drawable>);
@@ -281,46 +236,48 @@ impl DrawableStack {
         Self( vec )
     }
 
-    pub fn draw(&self, ctx:&mut PaintCtx) {
+    pub fn draw(&self, time:f64, ctx:&mut PaintCtx) {
         println!("Called draw");
         let mut last_point = (0., 0.);
         let mut last_style = Default::default();
         let bounds = ctx.size().to_rect();
         let width = bounds.width();
         let height = bounds.height();
-        let time = 0f64;
         let mut cvar = CalcVars::new(width, height, time, false);
+        
+        fn draw_fill_bordered(ctx:&mut PaintCtx, fill:&FillMethod, shape:&impl Shape, border:&Option<BorderStyle>) {
+            match fill {
+                FillMethod::None => (),
+                FillMethod::Solid(brush) => { ctx.fill(shape, brush); },
+                FillMethod::LinearGradient(brush) => { ctx.fill(shape, brush); },
+                FillMethod::RadialGradient(brush) => { ctx.fill(shape, brush); },
+            }
+            if let Some(border) = border.as_ref() {
+                ctx.stroke_styled(shape, &border.color, border.width, &border.style);
+            }
+        }
 
         for d in self.0.iter() {
-            macro_rules! draw {
-                ($fill:ident, $shape:ident, $border:ident) => {
-                    match $fill {
-                        FillMethod::None => (),
-                        FillMethod::Solid(brush) => { ctx.fill($shape, brush); },
-                        FillMethod::LinearGradient(brush) => { ctx.fill($shape, brush); },
-                        FillMethod::RadialGradient(brush) => { ctx.fill($shape, brush); },
-                    }
-                    if let Some(border) = $border.as_ref() {
-                        ctx.stroke_styled($shape, &border.color, border.width, &border.style);
-                    }
-                };
-            }
-            
             match d {
                 Drawable::Rect { top, right, bottom, left, border, round, fill  } => {
                     let round = round.unwrap_or( Default::default() );
                     let rect = RoundedRect::new( left.calc(cvar.width_base()), top.calc(cvar.height_base()), right.calc(cvar.width_base()), bottom.calc(cvar.height_base()), round );
-                    draw!(fill, rect, border);
+                    draw_fill_bordered(ctx, fill, &rect, border);
                 },
                 Drawable::Circle { center, radius, border, fill } => {
-                    let circle = Circle::new( center.calc(&mut cvar), *radius);
-                    draw!(fill, circle, border);
+                    let mcvar = &mut cvar;
+                    let circle = Circle::new( center.calc(mcvar), radius.calc(mcvar));
+                    draw_fill_bordered(ctx, fill, &circle, border);
                 },
-                Drawable::Ellipse { center, border, elli, fill } => {
-                    let elli = Ellipse::new( center.calc(&mut cvar), elli.radii(), elli.rotation());
-                    draw!(fill, elli, border);
+                Drawable::Ellipse { center, border, fill, radi, x_rot } => {
+                    let mcvar = &mut cvar;
+                    let elli = Ellipse::new( center.calc(mcvar), radi.to_vec2(mcvar), x_rot.calc(mcvar));
+                    draw_fill_bordered(ctx, fill, &elli, border);
                 },
-                Drawable::Arc{ pos, border, arc} => { 
+                Drawable::Arc{ center, radi, start_angle, sweep_angle, x_rot, border } => { 
+                    let mcvar = &mut cvar;
+                    let center = center.calc(mcvar);
+                    let arc = Arc { center: Point { x: center.0, y: center.0 }, radii: radi.to_vec2(mcvar), start_angle: start_angle.calc(mcvar), sweep_angle: sweep_angle.calc(mcvar), x_rotation: x_rot.calc(mcvar) };
                     ctx.stroke_styled(arc, &border.color, border.width, &border.style);
                 }
                 Drawable::Line { start, end, style } => {
@@ -338,7 +295,7 @@ impl DrawableStack {
     pub fn to_background<T>(self) -> BackgroundBrush<T> {
         let painter_fn = Box::new( 
             move |ctx:&mut druid::PaintCtx, t:&T, env:&druid::Env| {
-                self.draw(ctx);
+                self.draw(0. , ctx);
             }
         );
         BackgroundBrush::Painter( druid::widget::Painter::<T>::new(painter_fn) )

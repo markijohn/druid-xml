@@ -18,7 +18,7 @@ fn main() {
 
 		//Rounded fill
 		Drawable::Rect {
-			top:Number::Abs(0),
+			top:Number::Abs(0.),
 			right:Number::Rel(1f64),
 			bottom:Number::Rel(1f64),
 			left:Number::from_str("calc(100% - 20)").unwrap(),
@@ -31,16 +31,17 @@ fn main() {
 			fill: FillMethod::Solid(col_red) }
 
 		,Drawable::Circle { 
-			center: QPoint::from("35", "15").unwrap(), 
-			radius: 15., 
+			center: QVec2::from("35", "15").unwrap(), 
+			radius: Number::Abs(15.), 
 			border: Some(BorderStyle::new(Default::default(), 3. , col_blue ) ), 
 			fill: FillMethod::Solid( col_white ) }
 
-		,Drawable::Ellipse { 
-			center: QPoint::from("50%", "15").unwrap(), 
-			border: Some(BorderStyle::new(Default::default(), 3. , col_blue ) ), 
-			elli : Ellipse::new( (0. , 0.), Vec2 {x:13. , y:15.}, 0.7),
-			fill: FillMethod::Solid( col_white ) }
+		,Drawable::Ellipse {
+			center:QVec2::from("50%","15").unwrap(),
+			border:Some(BorderStyle::new(Default::default(),3.,col_blue)),
+			fill:FillMethod::Solid(col_white), 
+			radi: QVec2::from("13","15").unwrap(), 
+			x_rot: Number::Abs(0.7) }
 	] );
 
 	
