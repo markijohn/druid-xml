@@ -11,4 +11,4 @@ edition = "2018"
 druid-xml = {path="../druid-xml"}
 druid-xml-macro = {path="../druid-xml-macro"}
 #druid = "0.7.0"
-druid = {git="https://github.com/linebender/druid.git"}
+druid = {git="https://github.com/linebender/druid.git", features=["im"]}
