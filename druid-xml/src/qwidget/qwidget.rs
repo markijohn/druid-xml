@@ -1,14 +1,60 @@
-use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref, DerefMut}, collections::HashSet};
+use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref, DerefMut}, collections::HashSet, collections::HashMap};
 
 use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size};
 use serde_json::Value;
+use simplecss::{Selector};
+
+use super::drawable::Drawable;
 
 //pub type QWidget = Rc<UnsafeCell<QWidgetRaw>>;
 
+#[derive(Debug, Eq, PartialEq, Hash)]
+struct CacheItem(Rc<String>);
 
-pub struct QWidgetContext {
-    localname_table : HashSet<Rc<String>>,
-    class_table : HashSet<Rc<String>>,
+impl Borrow<str> for CacheItem {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+pub struct QWidgetContext<'a> {
+    localname_table : HashSet<CacheItem>,
+    class_table : HashSet<CacheItem>,
+    drawables : HashMap<Selector<'a>,Drawable>
+}
+
+impl <'a> QWidgetContext<'a> {
+    pub fn new() -> Self {
+        Self {
+            localname_table : HashSet::new(),
+            class_table : HashSet::new(),
+            drawables : HashMap::new()
+        }
+    }
+
+    pub fn get_localname(&mut self, name:&str) -> Rc<String> {
+        if let Some(exist) = self.localname_table.get( name ) {
+            exist.0.clone()
+        } else {
+            let rc = Rc::new(name.to_string());
+            self.localname_table.insert( CacheItem(rc.clone()) );
+            rc
+        }
+    }
+
+    pub fn get_class(&mut self, name:&str) -> Rc<String> {
+        if let Some(exist) = self.class_table.get( name ) {
+            exist.0.clone()
+        } else {
+            let rc = Rc::new(name.to_string());
+            self.class_table.insert( CacheItem(rc.clone()) );
+            rc
+        }
+    }
+
+    pub fn draw(ctx:&PaintCtx) {
+
+    }
 }
 
 #[derive(Clone)]
@@ -249,7 +295,7 @@ impl QueryChain {
                 
         //     }
         // });
-        todo!()
+        unimplemented!()
     }
 
     pub fn show(&self) -> usize {

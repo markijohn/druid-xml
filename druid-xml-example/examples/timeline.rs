@@ -31,12 +31,28 @@ impl Widget<Timeline> for TimelineBar {
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &Timeline, env: &Env) -> Size {
-        bc.max()
+        // BoxConstraints are passed by the parent widget.
+        // This method can return any Size within those constraints:
+        // bc.constrain(my_size)
+        //
+        // To check if a dimension is infinite or not (e.g. scrolling):
+        // bc.is_width_bounded() / bc.is_height_bounded()
+        //
+        // bx.max() returns the maximum size of the widget. Be careful
+        // using this, since always make sure the widget is bounded.
+        // If bx.max() is used in a scrolling widget things will probably
+        // not work correctly.
+        if bc.is_width_bounded() && bc.is_height_bounded() {
+            bc.max()
+        } else {
+            let size = Size::new(300.0, 100.0);
+            bc.constrain(size)
+        }
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &Timeline, env: &Env) {
-        
-        ctx.stroke_styled(Rect::new(0., 0., ), brush, width, style)
+        let size = ctx.size();
+        ctx.stroke(Rect::new(0., 0., size.width, size.height), &Color::rgb8(0,0,200), 1.);
     }
 }
 
@@ -45,7 +61,7 @@ pub fn main() {
     events.push_back( TimeEvent{time:1.2, event:"OK".to_string()} );
     let window = WindowDesc::new(TimelineBar )
         .window_size((640., 480.))
-        .resizable(false)
+        .resizable(true)
         .title( "Basic demo" );
     AppLauncher::with_window(window)
         .launch( Timeline { head : Some( Target{id:0, events} )} )

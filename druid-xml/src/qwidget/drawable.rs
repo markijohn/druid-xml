@@ -237,7 +237,6 @@ impl DrawableStack {
     }
 
     pub fn draw(&self, time:f64, ctx:&mut PaintCtx) {
-        println!("Called draw");
         let mut last_point = (0., 0.);
         let mut last_style = Default::default();
         let bounds = ctx.size().to_rect();
