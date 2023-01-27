@@ -1,5 +1,7 @@
+mod attrs;
 mod flex;
 mod qwidget;
+mod selector;
 pub mod drawable;
 
 

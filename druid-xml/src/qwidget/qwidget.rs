@@ -2,11 +2,9 @@ use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Dere
 
 use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size};
 use serde_json::Value;
-use simplecss::{Selector};
+use simplecss::{Selector, Element};
 
 use super::drawable::Drawable;
-
-//pub type QWidget = Rc<UnsafeCell<QWidgetRaw>>;
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 struct CacheItem(Rc<String>);
@@ -79,6 +77,13 @@ impl DerefMut for JSValue {
     }
 }
 
+
+pub trait Queryable {
+    fn find(&self, q:&str) -> QueryChain;
+    fn q(&self, q:&str) -> QueryChain;
+    fn root(&self) -> QueryChain;
+}
+
 #[derive(Clone)]
 pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
 
@@ -88,18 +93,58 @@ struct QWidgetRaw {
     classes : Vec<Rc<String>>,
     parent : Option< QWidget >,
     origin : Option<Box<dyn Widget<JSValue>>>,
-    //attribute : Attributes,
+    attribute : HashMap<Cow<'static,str>, Value>,
     childs : Vec< QWidget >
 }
 
+impl Element for QWidget {
+    fn parent_element(&self) -> Option<Self> {
+        unsafe { (*self.0.get()).parent.clone() }
+    }
 
-pub trait Queriable {
-    fn find(&self, q:&str) -> QueryChain;
-    fn q(&self, q:&str) -> QueryChain;
-    fn root(&self) -> QueryChain;
+    fn prev_sibling_element(&self) -> Option<Self> {
+        unsafe { 
+            if let Some(parent) = (*self.0.get()).parent.as_ref() {
+                if let Some(find) = (*parent.0.get()).childs.iter().skip(1).enumerate().find( |(i,e)| e.0.get() == self.0.get() ) {
+                    return Some( (*parent.0.get()).childs[find.0].clone() )
+                }
+            }
+            None
+        }
+    }
+
+    fn has_local_name(&self, name: &str) -> bool {
+        unsafe { (*self.0.get()).localname.as_str() == name }
+    }
+
+    fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
+        unsafe { 
+            if let Some(val) = (*self.0.get()).attribute.get(local_name) {
+                match val {
+                    Value::Null => operator.matches(""),
+                    Value::Bool(true) => {
+                        operator.matches("true")
+                    },
+                    Value::Bool(false) => {
+                        operator.matches("true")
+                    },
+                    Value::Number(v) => operator.matches(&v.to_string()),
+                    Value::String(v) => operator.matches(v.as_str()),
+                    Value::Array(_) => false,
+                    Value::Object(_) => false,
+                }
+            } else {
+                false
+            }
+        }
+    }
+
+    fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
+        todo!()
+    }
 }
 
-impl Queriable for QWidget {
+impl Queryable for QWidget {
     fn find(&self, q:&str) -> QueryChain {
         //find in self
         QueryChain ( vec![ QWidget(self.0.clone()) ] )
