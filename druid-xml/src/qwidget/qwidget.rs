@@ -1,10 +1,10 @@
 use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref, DerefMut}, collections::HashSet, collections::HashMap};
 
-use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size};
+use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size, Insets, Point, WidgetPod, widget::Axis};
 use serde_json::Value;
 use simplecss::{Selector, Element};
 
-use super::drawable::Drawable;
+use super::{drawable::Drawable, value::JSValue};
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 struct CacheItem(Rc<String>);
@@ -55,28 +55,6 @@ impl <'a> QWidgetContext<'a> {
     }
 }
 
-#[derive(Clone)]
-pub struct JSValue(Value);
-
-impl druid::Data for JSValue {
-    fn same(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl Deref for JSValue {
-    type Target=Value;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for JSValue {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 
 pub trait Queryable {
     fn find(&self, q:&str) -> QueryChain;
@@ -89,13 +67,16 @@ pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
 
 ///! Queriable widget
 struct QWidgetRaw {
+    padding: Insets,
+    margin: Insets,
     localname : Rc<String>,
     classes : Vec<Rc<String>>,
     parent : Option< QWidget >,
-    origin : Option<Box<dyn Widget<JSValue>>>,
-    attribute : HashMap<Cow<'static,str>, Value>,
+    origin : WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
+    attribute : HashMap<Cow<'static,str>, JSValue>,
     childs : Vec< QWidget >
 }
+
 
 impl Element for QWidget {
     fn parent_element(&self) -> Option<Self> {
@@ -120,7 +101,7 @@ impl Element for QWidget {
     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
         unsafe { 
             if let Some(val) = (*self.0.get()).attribute.get(local_name) {
-                match val {
+                match val.deref() {
                     Value::Null => operator.matches(""),
                     Value::Bool(true) => {
                         operator.matches("true")
@@ -171,52 +152,83 @@ impl Queryable for QWidget {
 
 impl Widget<JSValue> for QWidget {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut JSValue, env: &Env) {
-        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
-            origin.event(ctx, event, data, env);
+        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        origin.event(ctx, event, data, env);
+
+        //hover animation check
+        if origin.is_hot() {
+            //if time is not '1.' then repaint as start direction
+        }
+        //hover animation progressed check
+        else {
+            //if time is not '0.' then repaint as end direction
         }
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &JSValue, env: &Env) {
-        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
-            origin.lifecycle(ctx, event, data, env);
-        }
+        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        origin.lifecycle(ctx, event, data, env);
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx, old_data: &JSValue, data: &JSValue, env: &Env) {
-        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
-            origin.update(ctx, old_data, data, env);
-        }
+        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        origin.update(ctx, data, env);
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &JSValue, env: &Env) -> Size {
-        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
-            origin.layout(ctx, bc, data, env)
-        } else {
-            Default::default()
+        let qraw = unsafe { (&mut *self.0.get()) };
+        let origin = &mut qraw.origin;
+
+        let padding = qraw.padding;
+        let hpad = padding.x0 + padding.x1;
+        let vpad = padding.y0 + padding.y1;
+
+        let child_bc = bc.shrink((hpad, vpad));
+        let size = origin.layout(ctx, &child_bc, data, env);
+        let origin_point = Point::new(padding.x0, padding.y0);
+        origin.set_origin(ctx, origin_point);
+
+        let my_size = Size::new(size.width + hpad, size.height + vpad);
+        let my_insets = origin.compute_parent_paint_insets(my_size);
+        ctx.set_paint_insets(my_insets);
+        let baseline_offset = origin.baseline_offset();
+        if baseline_offset > 0f64 {
+            ctx.set_baseline_offset(baseline_offset + padding.y1);
         }
+        my_size
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &JSValue, env: &Env) {
         //TODO : DrawableStack
-        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
-            origin.paint(ctx, data, env);
-        }
+        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        origin.paint(ctx, data, env);
     }
 
+    fn compute_max_intrinsic(
+        &mut self,
+        axis: Axis,
+        ctx: &mut LayoutCtx,
+        bc: &BoxConstraints,
+        data: &JSValue,
+        env: &Env,
+    ) -> f64 {
+        let qraw = unsafe { (&mut *self.0.get()) };
+        let origin = &mut qraw.origin;
+        let padding = qraw.padding.size();
+        let child_bc = bc.shrink(padding);
+        let child_max_intrinsic_width = origin
+            .widget_mut()
+            .compute_max_intrinsic(axis, ctx, &child_bc, data, env);
+        child_max_intrinsic_width + axis.major(padding)
+    }
+    
     fn id(&self) -> Option<WidgetId> {
-        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
-            origin.id()
-        } else {
-            None
-        }
+        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        Some( origin.id() )
     }
 
     fn type_name(&self) -> &'static str {
-        if let Some(origin) = unsafe { &mut (&mut *self.0.get()).origin } {
-            origin.type_name()
-        } else {
-            "qwidget"
-        }
+        "qwidget"
     }
 }
 
@@ -360,8 +372,18 @@ impl QueryChain {
     }
 
     pub fn val(&self, new:Option<JSValue>) -> Option<&JSValue> {
+        
         //json value
         todo!()
+    }
+
+    pub fn val_one(&self) -> Option<&JSValue> {
+        if let Some(q) = self.0.get(0) {
+            let qw = unsafe { (&mut *q.0.get()) };
+            qw.attribute.get("value")
+        } else {
+            None
+        }
     }
 
 }

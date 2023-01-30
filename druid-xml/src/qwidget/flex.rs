@@ -22,7 +22,7 @@ use druid::widget::prelude::*;
 use druid::{Data, KeyOrValue, Point, Rect, WidgetPod};
 use druid::{BoxConstraints, Size};
 
-use super::qwidget::JSValue;
+use super::value::JSValue;
 
 /// A container with either horizontal or vertical layout.
 ///
