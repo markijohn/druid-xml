@@ -7,24 +7,9 @@ use druid::piet::{StrokeStyle, IntoBrush};
 use fasteval2::{Instruction, Slab, Evaler, Compiler};
 use std::str::FromStr;
 
-#[derive(Clone)]
-pub struct BorderStyle {
-    style : StrokeStyle,
-    width: f64,
-    color: Color,
-}
+use crate::simple_style::BorderStyle;
 
-impl BorderStyle {
-    pub fn new(style:StrokeStyle, width:f64, color:impl Into<Color>) -> Self {
-        Self { style, width, color : color.into()}
-    }
-}
 
-impl Default for BorderStyle {
-    fn default() -> Self {
-        Self { style: Default::default(), width: 1f64, color: Color::rgb8(0,0,0) }
-    }
-}
 
 pub struct Calculator {
     src : String,

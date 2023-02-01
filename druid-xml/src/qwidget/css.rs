@@ -14,3 +14,22 @@ pub const MARGIN_TOP:&'static str = "margin-top";
 pub const MARGIN_RIGHT:&'static str = "margin-right";
 pub const MARGIN_BOTTOM:&'static str = "margin-bottom";
 pub const MARGIN_LEFT:&'static str = "margin-left";
+
+pub struct RuleTable {
+	rules : Vec<Rule>
+}
+
+impl RuleTable {
+
+
+	pub fn draw_element(elem:impl Element, origin_size:Size) -> Size {
+		//search rule
+
+		//calc padding, margin
+	}
+}
+
+pub struct Rule {
+	selector : Selector,
+	attrs : Attributes
+}
