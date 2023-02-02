@@ -2,7 +2,9 @@ use std::{rc::Rc, ops::{Deref, DerefMut}, time::Duration};
 
 use druid::{Size, Insets, Color, Rect, piet::StrokeStyle};
 
-#[derive(Clone)]
+use crate::curve::AnimationCurve;
+
+#[derive(Clone,Copy)]
 pub enum JumpTerm {
     JumpStart, //Denotes a left-continuous function, so that the first jump happens when the animation begins
     JumpEnd, //Denotes a right-continuous function, so that the last jump happens when the animation ends
@@ -12,7 +14,7 @@ pub enum JumpTerm {
     End //Same as jump-end
 }
 
-#[derive(Clone)]
+#[derive(Clone,Copy)]
 pub enum TimingFunction {
     Ease, //Equal to cubic-bezier(0.25, 0.1, 0.25, 1.0), the default value, increases in velocity towards the middle of the animation, slowing back down at the end
     EaseIn, //Equal to cubic-bezier(0.42, 0, 1.0, 1.0), starts off slowly, with the speed of the transition of the animating property increasing until complete
@@ -30,6 +32,22 @@ pub enum TimingFunction {
     Steps{n:f64, jumpterm:JumpTerm}
 }
 
+impl TimingFunction {
+    pub fn translate(&self, t:f64) -> f64 {
+        match self {
+            TimingFunction::Ease => AnimationCurve::cubic(0.25, 0.1, 0.25, 1.0).translate(t),
+            TimingFunction::EaseIn => AnimationCurve::EASE_IN.translate(t),
+            TimingFunction::EaseOut => AnimationCurve::EASE_OUT.translate(t),
+            TimingFunction::EaseInOut => AnimationCurve::EASE_IN_OUT.translate(t),
+            TimingFunction::Linear => t,
+            TimingFunction::StepStart => todo!(),
+            TimingFunction::StepEnd => todo!(),
+            TimingFunction::CubicBezier { p1, p2, p3, p4 } => AnimationCurve::cubic(*p1, *p2, *p3, *p4).translate(t),
+            TimingFunction::Steps { n, jumpterm } => todo!(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum Direction {
     Normal,
@@ -42,16 +60,55 @@ pub enum Direction {
 pub struct Animation {
     delay : f64, //delay for start
     direction : Direction, //when animation is end how to start
-    duration : u64, //animation time in one cycle. actually this is the speed (nanosecond)
+    duration : i64, //animation time in one cycle. actually this is the speed (nanosecond)
     iteration : f64, //how many repeat animation
     name : f64, //animation progression state
     timing_function : TimingFunction, //timinig function
     fill_mode : f64, //how to fill when animation start/end
 }
 
+#[derive(Clone)]
 pub struct AnimationState {
-    counted : u64,
+    elapsed : i64,
     anim : Animation
+}
+
+impl From<Animation> for AnimationState {
+    fn from(value: Animation) -> Self {
+        Self {
+            elapsed : 0,
+            anim : value
+        }
+    }
+}
+
+impl AnimationState {
+    pub fn transit<T:Transit>(&mut self,src:T, target:T, interval:i64) -> (bool,T) {
+        let old_elapsed = self.elapsed;
+
+        self.elapsed += interval;
+        let has_more = 
+        if self.elapsed <= 0 {
+            self.elapsed = 0;
+            if old_elapsed == self.elapsed {
+                return (false, src)
+            }
+            false
+        } else if self.elapsed >= self.anim.duration {
+            self.elapsed = self.anim.duration;
+            if old_elapsed == self.elapsed {
+                return (false, target)
+            }
+            false
+        } else {
+            true
+        };
+
+        let alpha = self.anim.timing_function.translate( self.elapsed as f64 / self.anim.duration as f64 );
+        println!("alpha {} {} {}", self.elapsed, self.anim.duration, alpha);
+
+        (has_more, src.transit(target, alpha))
+    }
 }
 
 #[derive(Clone,Debug)]
@@ -82,8 +139,8 @@ impl <T> StyleQueryResult<T> {
         }
     }
 
-    pub fn into(self) -> Option<T> {
-        self.data
+    pub fn into(self) -> (bool,Option<T>) {
+        (self.is_animated, self.data)
     }
 
     pub fn has_next_animation(&self) -> bool {
@@ -91,42 +148,56 @@ impl <T> StyleQueryResult<T> {
     }
 }
 
-trait Transit {
+pub trait Transit {
     /// `forward_dir` flag is linear forward
     /// `target` is the goal of transit
     /// `duration` is animation time
     /// `interval` how to elapsed time
     /// (bool,Self) first bool is reach the end. Self is calculate value
-    fn transit(self, forward_dir:bool, target:Self, duration:u64, interval:u64) -> (bool,Self);
+    fn transit(self, target:Self, alpha:f64) -> Self;
 }
 
 impl Transit for f64 {
-    fn transit(self, forward_dir:bool, target:Self, duration:u64, interval:u64) -> (bool,Self) {
-        if forward_dir {
-            let total = target - self;
-            let alpha = Duration::from_nanos(interval).as_secs_f64().min(duration) / duration;
-            curr + total * alpha
-        } else {
-            let total = self - target;
-        }
+    fn transit(self, target:Self, alpha:f64) -> Self {
+        let diff = target - self;
+        self + diff * alpha
     }
 }
 
 impl Transit for Insets {
-    fn transit(self, curr:Self, target:Self, duration:f64, interval:u64) -> Self {
+    fn transit(self, target:Self, alpha:f64) -> Self {
         let diff_x0 = target.x0 - self.x0;
         let diff_y0 = target.y0 - self.y0;
         let diff_x1 = target.x1 - self.x1;
         let diff_y1 = target.y1 - self.y1;
-        let alpha = Duration::from_nanos(interval).as_secs_f64().min(duration) / duration;
         // println!("inter  {} {}",Duration::from_nanos(interval).as_secs_f64(), duration);
         // println!("alpha  {}",alpha);
         // println!("diff  {} {} {} {}",diff_x0, diff_y0, diff_x1, diff_y1);
         Self { 
-            x0: curr.x0 + diff_x0 * alpha, 
-            y0: curr.y0 + diff_y0 * alpha, 
-            x1: curr.x1 + diff_x1 * alpha, 
-            y1: curr.y1 + diff_y1 * alpha 
+            x0: self.x0 + diff_x0 * alpha, 
+            y0: self.y0 + diff_y0 * alpha, 
+            x1: self.x1 + diff_x1 * alpha, 
+            y1: self.y1 + diff_y1 * alpha 
+        }
+    }
+}
+
+impl Transit for Color {
+    fn transit(self, target:Self, alpha:f64) -> Self {
+        let self_rgba = self.as_rgba_u32();
+        let diff_rgba = target.as_rgba_u32() - self_rgba;
+        Color::from_rgba32_u32( self_rgba + (diff_rgba as f64 * alpha) as u32 )
+    }
+}
+
+impl Transit for BorderStyle {
+    fn transit(self, target:Self, alpha:f64) -> Self {
+        let diff_width = target.width - self.width;
+        let self_rgba = self.color.as_rgba_u32();
+        let diff_rgba = target.color.as_rgba_u32() - self_rgba;
+        BorderStyle { style: self.style, 
+            width: self.width + diff_width * alpha,
+            color: Color::from_rgba32_u32( self_rgba + (diff_rgba as f64 * alpha) as u32 )
         }
     }
 }
@@ -151,14 +222,14 @@ impl Default for BorderStyle {
 }
 
 pub struct Styler {
-    pub(crate) padding : (Option<Insets>,Option<Animation>),
-    pub(crate) margin : (Option<Insets>,Option<Animation>),
-    pub(crate) font_size : (Option<f64>,Option<Animation>),
-    pub(crate) width : (Option<f64>,Option<Animation>),
-    pub(crate) height : (Option<f64>,Option<Animation>),
-    pub(crate) text_color : (Option<Color>,Option<Animation>),
-    pub(crate) background_color : (Option<Color>,Option<Animation>),
-    pub(crate) border : (Option<BorderStyle>,Option<Animation>),
+    pub(crate) padding : (Option<Insets>,Option<AnimationState>),
+    pub(crate) margin : (Option<Insets>,Option<AnimationState>),
+    pub(crate) font_size : (Option<f64>,Option<AnimationState>),
+    pub(crate) width : (Option<f64>,Option<AnimationState>),
+    pub(crate) height : (Option<f64>,Option<AnimationState>),
+    pub(crate) text_color : (Option<Color>,Option<AnimationState>),
+    pub(crate) background_color : (Option<Color>,Option<AnimationState>),
+    pub(crate) border : (Option<BorderStyle>,Option<AnimationState>),
 }
 
 
@@ -167,19 +238,16 @@ impl Styler {
         self.padding.0
     }
 
-    pub fn get_padding_with_anim(&mut self, is_forward:bool, time:u64, curr:Option<Insets>, target:Option<Insets>) -> StyleQueryResult<Insets> {
-        if let Some(curr) = curr {
-            if let (Some(p), ref anim) = self.padding {
-                if let (Some(anim), Some(target)) = (anim,target) {
-                    return StyleQueryResult::some(true, p.transit(curr, target, anim.duration, time));
-                } else {
-                    return StyleQueryResult::some(false, p);
-                }
+    pub fn get_padding_with_anim(&mut self, elapsed:i64, target:Option<Insets>) -> StyleQueryResult<Insets> {
+        if let (Some(p), anim  ) = &mut self.padding {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(*p, target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
             } else {
-                StyleQueryResult::none(false)
+                return StyleQueryResult::some(false, *p);
             }
         } else {
-            StyleQueryResult::new( false, self.padding.0 )
+            StyleQueryResult::none(false)
         }
     }
 
@@ -187,27 +255,34 @@ impl Styler {
         self.margin.0
     }
 
-    pub fn get_margin_with_anim(&mut self, time:f64, base_margin:Insets) -> StyleQueryResult<Insets> {
-        todo!()
+    pub fn get_margin_with_anim(&mut self, elapsed:i64, target:Option<Insets>) -> StyleQueryResult<Insets> {
+        if let (Some(p), anim  ) = &mut self.margin {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(*p, target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
+            } else {
+                return StyleQueryResult::some(false, *p);
+            }
+        } else {
+            StyleQueryResult::none(false)
+        }
     }
 
     pub fn get_font_size(&self) -> Option<f64> {
         self.font_size.0
     }
 
-    pub fn get_font_size_with_anim(&mut self,time:f64, base_size:f64) -> StyleQueryResult<Color> {
-        // for n in self.iter() {
-        //     if let Target::FontSize(s) = n.target {
-        //         let diff = base_size - s;
-        //         if let Some(anim) = n.animation {
-        //             return StyleQueryResult::some(true, p);
-        //         } else {
-        //             return StyleQueryResult::some(false, p);
-        //         }
-        //     }
-        // }
-        // StyleQueryResult::none(false)
-        todo!()
+    pub fn get_font_size_with_anim(&mut self, elapsed:i64, target:Option<f64>) -> StyleQueryResult<f64> {
+        if let (Some(p), anim  ) = &mut self.font_size {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(*p, target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
+            } else {
+                return StyleQueryResult::some(false, *p);
+            }
+        } else {
+            StyleQueryResult::none(false)
+        }
     }
 
     pub fn get_width(&self) -> Option<f64> {
@@ -257,15 +332,16 @@ impl Styler {
 mod test {
     use druid::Insets;
 
-    use crate::simple_style::{Styler, Animation, Direction, TimingFunction};
+    use crate::simple_style::{Styler, Animation, Direction, TimingFunction, AnimationState};
 
     #[test]
     fn calc_test() {
-        let anim = Animation { delay: 0., direction: Direction::Alternate, duration: 2., iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 1. };
+        let anim = Animation { delay: 0., direction: Direction::Alternate, duration: 2000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 1. };
+        let anim_state = AnimationState::from( anim );
         let mut styler = Styler {
-            padding: ( Some( Insets { x0: 10., y0: 10., x1: 20., y1: 20. } ), Some(anim.clone()) ),
+            padding: ( Some( Insets { x0: 10., y0: 10., x1: 20., y1: 20. } ), Some(anim_state.clone()) ),
             margin: (None,None),
-            font_size: ( Some(12.), Some(anim.clone())),
+            font_size: ( Some(12.), Some(anim_state.clone())),
             width: (None,None),
             height: (None,None),
             text_color: (None,None),
@@ -275,15 +351,25 @@ mod test {
 
         println!("Get Initial : {:?}", styler.get_padding());
 
-        let curr = Some( Insets { x0: 10., y0: 10., x1: 20., y1: 20. } );
-        //forward
+        //animation 50%
         let target = Some( Insets { x0: 20., y0: 20., x1: 40., y1: 40. } );
-        println!("Get 50% progress forward : {:?}", styler.get_padding_with_anim( true, 1000_000_000, curr, target) );
-        assert_eq!( styler.get_padding_with_anim( true, 1000_000_000, curr, target).into(), Some(Insets::new(15., 15., 30., 30.)) );
+        let transit = styler.get_padding_with_anim( 1000_000_000, target);
+        println!("+50%(=50%) progress forward : {:?}",  transit);
+        assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
 
-        //reverse
-        let target = Some( Insets { x0: 5., y0: 5., x1: 10., y1: 10. } );
-        println!("Get 50% progress reverse : {:?}", styler.get_padding_with_anim( true, 1000_000_000, curr, target) );
-        assert_eq!( styler.get_padding_with_anim( true, 1000_000_000, curr, target).into(), Some( Insets { x0: 7.5, y0: 7.5, x1: 15., y1: 15. } ) );
+        //animation 50% (with keep state)
+        let transit = styler.get_padding_with_anim( 1000_000_000, target);
+        println!("+50%(=100%) progress forward : {:?}",  transit);
+        assert_eq!( transit.into(), (true,Some(Insets::new(20., 20., 40., 40.))) );
+
+        //animation overflowing
+        let transit = styler.get_padding_with_anim( 1000_000_000, target);
+        println!("+50%(=150% but keeped 100%) progress forward : {:?}",  transit);
+        assert_eq!( transit.into(), (false,Some(Insets::new(20., 20., 40., 40.))) );
+
+        //backward 50% (current status is 100%)
+        let transit = styler.get_padding_with_anim( -1000_000_000, target);
+        println!("-50%(will be 50%) progress forward : {:?}",  transit);
+        assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
     }
 }

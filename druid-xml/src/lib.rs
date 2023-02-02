@@ -15,6 +15,7 @@ use writer::{SourceGenerator, DruidGenerator};
 pub mod qwidget;
 pub mod widget;
 mod simple_style;
+mod curve;
 
 
 #[derive(Default)]
