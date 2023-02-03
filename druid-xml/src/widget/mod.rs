@@ -1,2 +1,2 @@
 mod drawable;
-mod style_widget;
+pub mod style_widget;

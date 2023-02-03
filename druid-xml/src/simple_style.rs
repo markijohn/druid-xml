@@ -1,3 +1,5 @@
+#![allow(arithmetic_overflow)]
+
 use std::{rc::Rc, ops::{Deref, DerefMut}, time::Duration};
 
 use druid::{Size, Insets, Color, Rect, piet::StrokeStyle};
@@ -58,13 +60,13 @@ pub enum Direction {
 
 #[derive(Clone)]
 pub struct Animation {
-    delay : f64, //delay for start
-    direction : Direction, //when animation is end how to start
-    duration : i64, //animation time in one cycle. actually this is the speed (nanosecond)
-    iteration : f64, //how many repeat animation
-    name : f64, //animation progression state
-    timing_function : TimingFunction, //timinig function
-    fill_mode : f64, //how to fill when animation start/end
+    pub delay : f64, //delay for start
+    pub direction : Direction, //when animation is end how to start
+    pub duration : i64, //animation time in one cycle. actually this is the like animation speed (nanosecond)
+    pub iteration : f64, //how many repeat animation
+    pub name : f64, //animation progression state
+    pub timing_function : TimingFunction, //timinig function
+    pub fill_mode : f64, //how to fill when animation start/end
 }
 
 #[derive(Clone)]
@@ -85,6 +87,7 @@ impl From<Animation> for AnimationState {
 impl AnimationState {
     pub fn transit<T:Transit>(&mut self,src:T, target:T, interval:i64) -> (bool,T) {
         let old_elapsed = self.elapsed;
+        //println!("elapsed interval duration {} {} {}", self.elapsed, interval, self.anim.duration);
 
         self.elapsed += interval;
         let has_more = 
@@ -105,7 +108,7 @@ impl AnimationState {
         };
 
         let alpha = self.anim.timing_function.translate( self.elapsed as f64 / self.anim.duration as f64 );
-        println!("alpha {} {} {}", self.elapsed, self.anim.duration, alpha);
+        //println!("alpha {} {} {}", self.elapsed, self.anim.duration, alpha);
 
         (has_more, src.transit(target, alpha))
     }
@@ -170,7 +173,6 @@ impl Transit for Insets {
         let diff_y0 = target.y0 - self.y0;
         let diff_x1 = target.x1 - self.x1;
         let diff_y1 = target.y1 - self.y1;
-        // println!("inter  {} {}",Duration::from_nanos(interval).as_secs_f64(), duration);
         // println!("alpha  {}",alpha);
         // println!("diff  {} {} {} {}",diff_x0, diff_y0, diff_x1, diff_y1);
         Self { 
@@ -184,19 +186,30 @@ impl Transit for Insets {
 
 impl Transit for Color {
     fn transit(self, target:Self, alpha:f64) -> Self {
-        let self_rgba = self.as_rgba_u32();
-        let diff_rgba = target.as_rgba_u32() - self_rgba;
-        Color::from_rgba32_u32( self_rgba + (diff_rgba as f64 * alpha) as u32 )
+        let self_into = self.as_rgba8();
+        let target_into = target.as_rgba8();
+        let diff_r = ((target_into.0 as i16 - self_into.0 as i16) as f64 * alpha) as i16;
+        let diff_g = ((target_into.1 as i16 - self_into.1 as i16) as f64 * alpha) as i16;
+        let diff_b = ((target_into.2 as i16 - self_into.2 as i16) as f64 * alpha) as i16;
+        let diff_a = ((target_into.3 as i16 - self_into.3 as i16) as f64 * alpha) as i16;
+        Color::rgba8( 
+        (self_into.0 as i16+diff_r) as _, 
+        (self_into.1 as i16+diff_g) as _,
+        (self_into.2 as i16+diff_b) as _,
+        (self_into.3 as i16+diff_a) as _
+        )
     }
 }
 
 impl Transit for BorderStyle {
     fn transit(self, target:Self, alpha:f64) -> Self {
         let diff_width = target.width - self.width;
+        let diff_radius = target.radius - self.radius;
         let self_rgba = self.color.as_rgba_u32();
         let diff_rgba = target.color.as_rgba_u32() - self_rgba;
         BorderStyle { style: self.style, 
             width: self.width + diff_width * alpha,
+            radius: self.radius + diff_radius * alpha,
             color: Color::from_rgba32_u32( self_rgba + (diff_rgba as f64 * alpha) as u32 )
         }
     }
@@ -206,30 +219,31 @@ impl Transit for BorderStyle {
 pub struct BorderStyle {
     pub style : StrokeStyle,
     pub width: f64,
+    pub radius : f64,
     pub color: Color,
 }
 
 impl BorderStyle {
-    pub fn new(style:StrokeStyle, width:f64, color:impl Into<Color>) -> Self {
-        Self { style, width, color : color.into()}
+    pub fn new(style:StrokeStyle, width:f64, radius:f64, color:impl Into<Color>) -> Self {
+        Self { style, width, radius , color : color.into()}
     }
 }
 
 impl Default for BorderStyle {
     fn default() -> Self {
-        Self { style: Default::default(), width: 1f64, color: Color::rgb8(0,0,0) }
+        Self { style: Default::default(), width: 1f64, radius:0f64, color: Color::rgb8(0,0,0) }
     }
 }
 
 pub struct Styler {
-    pub(crate) padding : (Option<Insets>,Option<AnimationState>),
-    pub(crate) margin : (Option<Insets>,Option<AnimationState>),
-    pub(crate) font_size : (Option<f64>,Option<AnimationState>),
-    pub(crate) width : (Option<f64>,Option<AnimationState>),
-    pub(crate) height : (Option<f64>,Option<AnimationState>),
-    pub(crate) text_color : (Option<Color>,Option<AnimationState>),
-    pub(crate) background_color : (Option<Color>,Option<AnimationState>),
-    pub(crate) border : (Option<BorderStyle>,Option<AnimationState>),
+    pub padding : (Option<Insets>,Option<AnimationState>),
+    pub margin : (Option<Insets>,Option<AnimationState>),
+    pub font_size : (Option<f64>,Option<AnimationState>),
+    pub width : (Option<f64>,Option<AnimationState>),
+    pub height : (Option<f64>,Option<AnimationState>),
+    pub text_color : (Option<Color>,Option<AnimationState>),
+    pub background_color : (Option<Color>,Option<AnimationState>),
+    pub border : (Option<BorderStyle>,Option<AnimationState>),
 }
 
 
@@ -289,40 +303,85 @@ impl Styler {
         self.width.0
     }
 
-    pub fn get_width_with_anim(&mut self,time:f64, base_size:f64, content_size:f64) -> StyleQueryResult<Color> {
-        todo!()
+    pub fn get_width_with_anim(&mut self,elapsed:i64, target:Option<f64>) -> StyleQueryResult<f64> {
+        if let (Some(p), anim  ) = &mut self.width {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(*p, target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
+            } else {
+                return StyleQueryResult::some(false, *p);
+            }
+        } else {
+            StyleQueryResult::none(false)
+        }
     }
 
     pub fn get_height(&self) -> Option<f64> {
         self.height.0
     }
 
-    pub fn get_height_with_anim(&mut self,time:f64, base_size:f64, content_size:f64) -> StyleQueryResult<Color> {
-        todo!()
+    pub fn get_height_with_anim(&mut self,elapsed:i64, target:Option<f64>) -> StyleQueryResult<f64> {
+        if let (Some(p), anim  ) = &mut self.height {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(*p, target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
+            } else {
+                return StyleQueryResult::some(false, *p);
+            }
+        } else {
+            StyleQueryResult::none(false)
+        }
     }
 
     pub fn get_text_color(&self) -> Option<Color> {
         self.text_color.0
     }
 
-    pub fn get_text_color_with_anim(&mut self, base_color:Color) -> StyleQueryResult<Color> {
-        todo!()
+    pub fn get_text_color_with_anim(&mut self, elapsed:i64, target:Option<Color>) -> StyleQueryResult<Color> {
+        if let (Some(p), anim  ) = &mut self.text_color {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(*p, target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
+            } else {
+                return StyleQueryResult::some(false, *p);
+            }
+        } else {
+            StyleQueryResult::none(false)
+        }
     }
 
     pub fn get_background_color(&self) -> Option<Color> {
         self.background_color.0
     }
 
-    pub fn get_background_color_with_anim(&mut self, base_color:Color) -> StyleQueryResult<Color> {
-        todo!()
+    pub fn get_background_color_with_anim(&mut self, elapsed:i64, target:Option<Color>) -> StyleQueryResult<Color> {
+        if let (Some(p), anim  ) = &mut self.background_color {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(*p, target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
+            } else {
+                return StyleQueryResult::some(false, *p);
+            }
+        } else {
+            StyleQueryResult::none(false)
+        }
     }
 
     pub fn get_border(&self) -> Option<BorderStyle> {
         self.border.0.clone()
     }
 
-    pub fn get_border_with_anim(&mut self) -> StyleQueryResult<f64> {
-        todo!()
+    pub fn get_border_with_anim(&mut self, elapsed:i64, target:Option<BorderStyle>) -> StyleQueryResult<BorderStyle> {
+        if let (Some(p), anim  ) = &mut self.border {
+            if let (Some(anim), Some(target)) = (anim,target) {
+                let transit = anim.transit(p.clone(), target, elapsed);
+                return StyleQueryResult::some(transit.0, transit.1);
+            } else {
+                return StyleQueryResult::some(false, p.clone());
+            }
+        } else {
+            StyleQueryResult::none(false)
+        }
     }
 }
 

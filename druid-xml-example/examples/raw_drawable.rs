@@ -6,6 +6,7 @@ use druid::widget::Flex;
 use druid::{AppLauncher, WindowDesc, widget::Label};
 use druid::{WidgetExt, Color, Vec2};
 use druid_xml::qwidget::drawable::*;
+use druid_xml::simple_style::BorderStyle;
 
 fn main() {
 	let border_color = Color::rgb8(64,64,64);
@@ -25,6 +26,7 @@ fn main() {
 			border: Some(BorderStyle::new(
 				StrokeStyle{ line_join: Default::default(), line_cap: Default::default(), dash_pattern: Default::default(), dash_offset: 0.5 } ,
 				2f64,
+				0.,
 				Color::rgb8(0,0,0)
 			)), 
 			round: None, 
@@ -33,12 +35,12 @@ fn main() {
 		,Drawable::Circle { 
 			center: QVec2::from("35", "15").unwrap(), 
 			radius: Number::Abs(15.), 
-			border: Some(BorderStyle::new(Default::default(), 3. , col_blue ) ), 
+			border: Some(BorderStyle::new(Default::default(), 3. , 0., col_blue ) ), 
 			fill: FillMethod::Solid( col_white ) }
 
 		,Drawable::Ellipse {
 			center:QVec2::from("50%","15").unwrap(),
-			border:Some(BorderStyle::new(Default::default(),3.,col_blue)),
+			border:Some(BorderStyle::new(Default::default(),3., 0., col_blue)),
 			fill:FillMethod::Solid(col_white), 
 			radi: QVec2::from("13","15").unwrap(), 
 			x_rot: Number::Abs(0.7) }
