@@ -1,14 +1,8 @@
-use std::collections::VecDeque;
-use std::rc::Rc;
-
-use crate::simple_style::{Animation, Styler, BorderStyle};
-use druid::commands::SCROLL_TO_VIEW;
-use druid::kurbo::{Affine, Insets, Point, Rect, Shape, Size, RoundedRect};
+use crate::simple_style::{Styler, BorderStyle};
+use druid::kurbo::{Insets, Point, Rect, Size, RoundedRect};
 use druid::widget::Axis;
-use druid::{
-    ArcStr, BoxConstraints, Color, Command, Cursor, Data, Env, Event, EventCtx, InternalEvent,
-    InternalLifeCycle, LayoutCtx, LifeCycle, LifeCycleCtx, Notification, PaintCtx, Region,
-    RenderContext, Target, TextLayout, UpdateCtx, Widget, WidgetId, WindowId, WidgetPod,
+use druid::{BoxConstraints, Color, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx,
+    RenderContext, UpdateCtx, Widget, WidgetPod,
 };
 
 enum Pseudo {
@@ -50,21 +44,22 @@ impl PseudoStyle {
 /// A StyleWidget for `hover` and `animation` effect
 /// This widget changed `Env` and support `Padding` and `Conatainer`
 /// Recommend pseudo class order is `focus` -> `hover` -> `active` but it's not mandatory
-pub struct SimpleStyleWidget<T> {
+pub struct SimpleStyleWidget<T,W> {
 	normal_style : Styler,
 	pseduo_styles : [Option<PseudoStyle>;3],
 
 	style : Style,
 
+	last_point : Point,
 	last_hover : bool,
 	last_focus : bool,
 	last_active : bool,
-	//inner : WidgetPod<T,W>
-	inner : Box<dyn Widget<T>>
+	inner_size : Rect,
+	inner : WidgetPod<T,W>
 }
 
-impl<T> SimpleStyleWidget<T> {
-    pub fn new<W:Widget<T>>(normal_style:Styler, pseduo_styles:[Option<PseudoStyle>;3], inner: W) -> SimpleStyleWidget<T> {
+impl<T,W:Widget<T>> SimpleStyleWidget<T,W> {
+    pub fn new(normal_style:Styler, pseduo_styles:[Option<PseudoStyle>;3], inner: W) -> SimpleStyleWidget<T,W> {
 		let padding = normal_style.get_padding();
 		let margin = normal_style.get_margin();
 		let font_size = normal_style.get_font_size();
@@ -88,11 +83,12 @@ impl<T> SimpleStyleWidget<T> {
 				border,
 			},
 
+			last_point : Point::new(0., 0.),
 			last_hover : false,
 			last_focus : false,
 			last_active : false,
-			//inner : WidgetPod::new(inner)
-			inner : Box::new(inner)
+			inner_size : Rect::new(0., 0., 0., 0.),
+			inner : WidgetPod::new(inner)
         }
     }
 
@@ -198,20 +194,40 @@ fn check_style(e:i64, src:&mut Styler, target:&Styler) -> Option<(bool,bool,bool
 	}
 }
 
-impl<T:Data> Widget<T> for SimpleStyleWidget<T> {
+fn wrapped_padding_env(env:&Env, style:&Style) -> Env {
+	let mut wrapped_env = env.clone();
+	wrapped_env.set( super::theme::PADDING, style.padding.unwrap_or_default());
+	wrapped_env.set( super::theme::FONT_SIZE, style.font_size.unwrap_or(14.));
+	wrapped_env.set( super::theme::COLOR, style.text_color.unwrap_or(Color::rgb8(255,255,255)));
+	wrapped_env
+}
+
+impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env) {
-		
-        //self.inner.event(ctx, event, data, env);
-		
-		
-		let has_focus = ctx.has_focus();
-		let is_active = ctx.is_active();
-		let is_hover = ctx.is_hot();
+		match event {
+			Event::MouseMove(e) => {
+				self.last_point = e.pos;
+			}
+			Event::MouseDown(e) => {
+				self.last_point = e.pos;
+			}
+			Event::MouseUp(e) => {
+				self.last_point = e.pos;
+			}
+			Event::Wheel(e) => {
+				self.last_point = e.pos;
+			}
+			_ => ()
+		};
+
+		let is_inner = self.inner_size.contains(self.last_point);
+		let has_focus = ctx.has_focus() && is_inner;
+		let is_active = ctx.is_active() && is_inner;
+		let is_hover = ctx.is_hot()  && is_inner;
 
 		if self.last_hover != is_hover {
-			ctx.request_anim_frame();
 			self.last_hover = is_hover;
-			return;
+			ctx.request_anim_frame();
 		}
 
 		if self.last_focus != has_focus {
@@ -258,44 +274,47 @@ impl<T:Data> Widget<T> for SimpleStyleWidget<T> {
 			}
 			_ => ()
 		}
-		//check hot active focus
+		
+		
+		self.inner.event(ctx, event, data, &wrapped_padding_env(env, &self.style));
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
-        self.inner.lifecycle(ctx, event, data, env);
+        self.inner.lifecycle(ctx, event, data, &wrapped_padding_env(env, &self.style));
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx, old_data: &T, data: &T, env: &Env) {
-        ///self.inner.update(ctx, data, env);
-		self.inner.update(ctx, old_data, data, env);
+        self.inner.update(ctx, data, &wrapped_padding_env(env, &self.style));
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env) -> Size {
-		let (pt,pr,pb,pl) = if let Some(padding) = self.style.padding {
-			(padding.y0, padding.x1, padding.y1, padding.x0)
+		let mut wrapped_env = env.clone();
+		if let Some(padding) = self.style.padding {
+			wrapped_env.set( super::theme::PADDING, padding );
 		} else {
-			(0., 0., 0., 0.)
+			wrapped_env.set( super::theme::PADDING, Insets::default() );
 		};
+		let env = &wrapped_env;
 		let (mt,mr,mb,ml) = if let Some(margin) = self.style.margin {
 			(margin.y0, margin.x1, margin.y1, margin.x0)
 		} else {
 			(0., 0., 0., 0.)
 		};
-		let child_bc = bc.shrink( (pl+pr+ml+mr, pt+pb+mt+mb) );
-		let size = self.inner.layout(ctx, &child_bc, data, env);
-		let origin = Point::new(pl+ml, pt+mt);
-		//let origin = Point::new(ml, mt);
+		let child_bc = bc.shrink( (ml+mr, mt+mb) );
+		let size = self.inner.layout(ctx, &child_bc, data, &wrapped_padding_env(env, &self.style));
+		let origin = Point::new(ml, mt);
 		self.inner.set_origin(ctx, origin);
 
 		let my_size = Size::new(
-			size.width + pl+pr+ml+mr,
-			size.height + pt+pb+mt+mb
+			size.width + ml+mr,
+			size.height + mt+mb
 		);
+		self.inner_size = Rect::new(ml, mt, my_size.width-mr, my_size.height-mb);
 		let my_insets = self.inner.compute_parent_paint_insets(my_size);
         ctx.set_paint_insets(my_insets);
         let baseline_offset = self.inner.baseline_offset();
         if baseline_offset > 0f64 {
-            ctx.set_baseline_offset(baseline_offset + pt+mt);
+            ctx.set_baseline_offset(baseline_offset + mt);
         }
 
 		my_size
@@ -321,7 +340,7 @@ impl<T:Data> Widget<T> for SimpleStyleWidget<T> {
 				ctx.fill(r, &background_color);
 			}
 		}
-        self.inner.paint(ctx, data, env);
+        self.inner.paint(ctx, data, &wrapped_padding_env(env, &self.style));
     }
 
 	fn compute_max_intrinsic(
@@ -332,21 +351,16 @@ impl<T:Data> Widget<T> for SimpleStyleWidget<T> {
         data: &T,
         env: &Env,
     ) -> f64 {
-		let (pt,pr,pb,pl) = if let Some(padding) = self.style.padding {
-			(padding.y0, padding.x1, padding.y1, padding.x0)
-		} else {
-			(0., 0., 0., 0.)
-		};
 		let (mt,mr,mb,ml) = if let Some(margin) = self.style.margin {
 			(margin.y0, margin.x1, margin.y1, margin.x0)
 		} else {
 			(0., 0., 0., 0.)
 		};
 
-		let child_bc = bc.shrink( (pl+pr+ml+mr, pt+pb+mt+mb) );
+		let child_bc = bc.shrink( (ml+mr, mt+mb) );
         self
             .inner
-            .widget_mut()
+			.widget_mut()
             .compute_max_intrinsic(axis, ctx, &child_bc, data, env)
     }
 }

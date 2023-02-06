@@ -430,5 +430,10 @@ mod test {
         let transit = styler.get_padding_with_anim( -1000_000_000, target);
         println!("-50%(will be 50%) progress forward : {:?}",  transit);
         assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
+
+        let target = Some( 24. );
+        let transit = styler.get_font_size_with_anim( 1000_000_000, target);
+        println!("+50%(=50%) progress forward : {:?}",  transit);
+        //assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
     }
 }

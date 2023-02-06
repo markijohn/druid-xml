@@ -9,6 +9,8 @@ use druid_xml::qwidget::drawable::*;
 use druid_xml::simple_style::{BorderStyle, Styler, AnimationState, Animation, Direction, TimingFunction};
 use druid_xml::widget::style_widget::{SimpleStyleWidget, PseudoStyle};
 
+use druid_xml::widget::theme;
+
 // what is diffrent margin and padding?
 // padding catching the origin widget event and propagation but margin area will ignored
 // padding area include as background paint but margin is not
@@ -38,12 +40,13 @@ fn main() {
 		None,
 		None
 	];
-	let margin_style_widget = SimpleStyleWidget::new(normal_style, pseudo_styles, Label::new("Margin Animation").with_text_size(24.) );
+	let origin = Label::new("Margin Animation").with_text_color( theme::COLOR ).with_text_size( theme::FONT_SIZE ).padding(druid_xml::widget::theme::PADDING ).on_click( |ctx, data,env| println!("Clicked2"));
+	let margin_style_widget = SimpleStyleWidget::new(normal_style, pseudo_styles, origin );
 
 	let normal_style = Styler {
 		padding: (Some(Insets::new(55., 15., 15., 5.)), Some(AnimationState::from( Animation{ delay: 0., direction: Direction::Normal, duration: 1000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } )) ),
 		margin : (Some(Insets::new(0., 10., 0., 0.)), None ),
-		font_size: (None,None),
+		font_size: (Some(14.),None),
 		width: (None,None),
 		height: (None,None),
 		text_color: (None,None),
@@ -54,7 +57,7 @@ fn main() {
 		Some(PseudoStyle::hover( Styler {
 			padding: (Some(Insets::new(15., 5., 55., 15.)), None ),
 			margin: (None,None),
-			font_size: (None,None),
+			font_size: (Some(24.), Some(AnimationState::from( Animation{ delay: 0., direction: Direction::Normal, duration: 1000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } )) ),
 			width: (None,None),
 			height: (None,None),
 			text_color: (None,None),
@@ -64,11 +67,12 @@ fn main() {
 		None,
 		None
 	];
-	let padding_style_widget = SimpleStyleWidget::new(normal_style, pseudo_styles, Label::new("Padding Animation").with_text_size(24.) );
+	let origin = Label::new("Padding Animation").with_text_color( theme::COLOR ).with_text_size( theme::FONT_SIZE ).padding(theme::PADDING ).on_click( |ctx, data,env| println!("Clicked"));
+	let padding_style_widget = SimpleStyleWidget::new(normal_style, pseudo_styles, origin );
 
 	let flex = Flex::column()
 	.with_child(margin_style_widget)
-	.with_child(padding_style_widget)
+	.with_child(padding_style_widget )
 	.with_child( Button::new("OK").border( Color::rgb8(0,0,0), 3.) )
 	;
 
