@@ -215,7 +215,7 @@ impl Transit for BorderStyle {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub struct BorderStyle {
     pub style : StrokeStyle,
     pub width: f64,
@@ -254,11 +254,21 @@ impl Styler {
 
     pub fn get_padding_with_anim(&mut self, elapsed:i64, target:Option<Insets>) -> StyleQueryResult<Insets> {
         if let (Some(p), anim  ) = &mut self.padding {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(*p, target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, *p);
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, *p)
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, *p)
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(*p, target, elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
         } else {
             StyleQueryResult::none(false)
@@ -271,11 +281,21 @@ impl Styler {
 
     pub fn get_margin_with_anim(&mut self, elapsed:i64, target:Option<Insets>) -> StyleQueryResult<Insets> {
         if let (Some(p), anim  ) = &mut self.margin {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(*p, target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, *p);
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, *p)
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, *p)
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(*p, target, elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
         } else {
             StyleQueryResult::none(false)
@@ -288,11 +308,21 @@ impl Styler {
 
     pub fn get_font_size_with_anim(&mut self, elapsed:i64, target:Option<f64>) -> StyleQueryResult<f64> {
         if let (Some(p), anim  ) = &mut self.font_size {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(*p, target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, *p);
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, *p)
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, *p)
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(*p, target, elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
         } else {
             StyleQueryResult::none(false)
@@ -305,11 +335,21 @@ impl Styler {
 
     pub fn get_width_with_anim(&mut self,elapsed:i64, target:Option<f64>) -> StyleQueryResult<f64> {
         if let (Some(p), anim  ) = &mut self.width {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(*p, target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, *p);
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, *p)
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, *p)
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(*p, target, elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
         } else {
             StyleQueryResult::none(false)
@@ -322,11 +362,21 @@ impl Styler {
 
     pub fn get_height_with_anim(&mut self,elapsed:i64, target:Option<f64>) -> StyleQueryResult<f64> {
         if let (Some(p), anim  ) = &mut self.height {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(*p, target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, *p);
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, *p)
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, *p)
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(*p, target, elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
         } else {
             StyleQueryResult::none(false)
@@ -339,11 +389,21 @@ impl Styler {
 
     pub fn get_text_color_with_anim(&mut self, elapsed:i64, target:Option<Color>) -> StyleQueryResult<Color> {
         if let (Some(p), anim  ) = &mut self.text_color {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(*p, target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, *p);
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, *p)
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, *p)
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(*p, target, elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
         } else {
             StyleQueryResult::none(false)
@@ -372,12 +432,6 @@ impl Styler {
                     StyleQueryResult::some(transit.0, transit.1)
                 }
             }
-            // if let (Some(anim), Some(target)) = (anim,target) {
-            //     let transit = anim.transit(*p, target, elapsed);
-            //     return StyleQueryResult::some(transit.0, transit.1);
-            // } else {
-            //     return StyleQueryResult::some(false, *p);
-            // }
         } else {
             StyleQueryResult::none(false)
         }
@@ -389,11 +443,21 @@ impl Styler {
 
     pub fn get_border_with_anim(&mut self, elapsed:i64, target:Option<BorderStyle>) -> StyleQueryResult<BorderStyle> {
         if let (Some(p), anim  ) = &mut self.border {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(p.clone(), target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, p.clone());
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, p.clone())
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, p.clone())
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(p.clone(), target.clone(), elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
         } else {
             StyleQueryResult::none(false)

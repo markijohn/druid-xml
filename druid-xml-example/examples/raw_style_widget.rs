@@ -32,7 +32,7 @@ fn main() {
 		border: (None,None),
 	};
 	let pseudo_styles = [
-		Some(PseudoStyle::active( Styler {
+		Some(PseudoStyle::hover( Styler {
 			margin: (Some(Insets::new(25., 0., 0., 0.)), None ),
 			padding: (None,None),
 			font_size: (None,None),
@@ -84,10 +84,10 @@ fn main() {
 		height: (None,None),
 		text_color: (None,None),
 		background_color: (Some(Color::rgb8(255,0,0)), None ),
-		border: (None,None),
+		border: (Some(BorderStyle {style:Default::default(), width:2., radius:1., color:Color::rgb8(255,255,255) }),None),
 	};
 	let pseudo_styles = [
-		Some(PseudoStyle::hover( Styler {
+		Some(PseudoStyle::active( Styler {
 			padding: (None, None ),
 			margin: (None,None),
 			font_size: (None, None ),
@@ -97,7 +97,16 @@ fn main() {
 			background_color: (Some(Color::rgb8(0,255,0)),None),
 			border: (None,None),
 		})),
-		None,
+		Some(PseudoStyle::hover( Styler {
+			padding: (None, None ),
+			margin: (None,None),
+			font_size: (None, None ),
+			width: (None,None),
+			height: (None,None),
+			text_color: (None,None),
+			background_color: (Some(Color::rgb8(0,0,255)),None),
+			border: (Some(BorderStyle {style:Default::default(), width:3., radius:5., color:Color::rgb8(0,0,255) }),None),
+		})),
 		None
 	];
 	let origin = DXButton::new("None Animation").padding(theme::PADDING ).on_click( |ctx, data,env| println!("Clicked"));

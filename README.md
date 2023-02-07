@@ -1,5 +1,8 @@
 # druid-xml : druid ui builder as xml
-* EARLY DEVELOPMENT STAGES
+
+## WARNING
+* VERY EARLY DEVELOPMENT STAGES
+* Experimental project
 
 ## crates
 * [`druid-xml`](https://github.com/markijohn/druid-xml/tree/main/druid-xml) : parse xml and genrate rust code or widget

@@ -56,23 +56,7 @@ impl<T: Data> DXButton<T> {
 }
 
 impl<T: Data> Widget<T> for DXButton<T> {
-    fn event(&mut self, ctx: &mut EventCtx, event: &Event, _data: &mut T, _env: &Env) {
-        match event {
-            Event::MouseDown(_) => {
-                if !ctx.is_disabled() {
-                    ctx.set_active(true);
-                    ctx.request_paint();
-                }
-            }
-            Event::MouseUp(_) => {
-                if ctx.is_active() && !ctx.is_disabled() {
-                    ctx.request_paint();
-                }
-                ctx.set_active(false);
-            }
-            _ => (),
-        }
-    }
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, _data: &mut T, _env: &Env) { }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
         if let LifeCycle::HotChanged(_) | LifeCycle::DisabledChanged(_) = event {
