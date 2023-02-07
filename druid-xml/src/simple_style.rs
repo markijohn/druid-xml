@@ -356,12 +356,28 @@ impl Styler {
 
     pub fn get_background_color_with_anim(&mut self, elapsed:i64, target:Option<Color>) -> StyleQueryResult<Color> {
         if let (Some(p), anim  ) = &mut self.background_color {
-            if let (Some(anim), Some(target)) = (anim,target) {
-                let transit = anim.transit(*p, target, elapsed);
-                return StyleQueryResult::some(transit.0, transit.1);
-            } else {
-                return StyleQueryResult::some(false, *p);
+            match (anim,target) {
+                (_, None) => {
+                    StyleQueryResult::some(false, *p)
+                }
+                (None, Some(target)) => {
+                    if elapsed <= 0 {
+                        StyleQueryResult::some(false, *p)
+                    } else {
+                        StyleQueryResult::some(false, target)
+                    }
+                }
+                (Some(anim), Some(target)) => {
+                    let transit = anim.transit(*p, target, elapsed);
+                    StyleQueryResult::some(transit.0, transit.1)
+                }
             }
+            // if let (Some(anim), Some(target)) = (anim,target) {
+            //     let transit = anim.transit(*p, target, elapsed);
+            //     return StyleQueryResult::some(transit.0, transit.1);
+            // } else {
+            //     return StyleQueryResult::some(false, *p);
+            // }
         } else {
             StyleQueryResult::none(false)
         }
@@ -419,7 +435,7 @@ mod test {
         //animation 50% (with keep state)
         let transit = styler.get_padding_with_anim( 1000_000_000, target);
         println!("+50%(=100%) progress forward : {:?}",  transit);
-        assert_eq!( transit.into(), (true,Some(Insets::new(20., 20., 40., 40.))) );
+        assert_eq!( transit.into(), (false,Some(Insets::new(20., 20., 40., 40.))) );
 
         //animation overflowing
         let transit = styler.get_padding_with_anim( 1000_000_000, target);

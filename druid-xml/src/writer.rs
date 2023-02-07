@@ -461,20 +461,17 @@ impl DruidGenerator {
                 style!("let {tag_wrap} = druid::WidgetExt::fix_height({tag_wrap}, " , "height", ");\n" );    
             }
             
-            //wrap 'Container' 
-            if tag != "container" {
-                style!("let {tag_wrap} = druid::WidgetExt::background({tag_wrap}, " , "background-color", ");\n" );
-                style!("let {tag_wrap} = druid::WidgetExt::border({tag_wrap}, " , "border", ");\n" );
-            }
-
             for (query, wrapper) in wrappers.iter() {
                 if let Some(selector) = simplecss::Selector::parse(query) {
                     if selector.matches( &elem_query ) {
-                        //src!("let {tag_wrap} = druid::WidgetExt::boxed( {tag_wrap} );\n");
-                        src!("let {tag_wrap} = ({wrapper}) ({tag_wrap});\n");
+                        //src!("let {tag_wrap} = ({wrapper})({tag_wrap});\n");
+                        src!("let widget = {tag_wrap};\n");
+                        src!("let {tag_wrap} = {wrapper};\n");
                     }
                 }
             }
+
+            //finally wrapping styler widget
         }
 
         src!("{tag_wrap}\n" ); //return element

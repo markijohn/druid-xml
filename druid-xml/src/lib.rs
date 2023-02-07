@@ -711,4 +711,30 @@ mod test {
 			println!("{} : {:?}", rule.selector.to_string(), rule.selector.specificity());
 		}
 	}
+
+	#[test]
+	fn basic_mapping() {
+		let src = r#"
+			r#"
+			<!-- The top-level element must have a `fn` `lens` element. -->
+			<!-- `fn` is generated function name. -->
+			<!-- `lens` is druid `Lens` type. -->
+			<flex direction="column" fn="build_main" lens="()">
+			  <flex>
+				  <label flex="1">Hello Druid!</label>
+				  <button id="my_btn" flex="1">OK</button>
+			  </flex>
+			  <label>Second</label>
+			</flex>
+			"#;
+		let mut map = HashMap::new();
+		map.insert("#my_btn".to_string(), r#"|btn| {
+				btn.on_click( |_,_,_| {
+					println!("On clicked");
+				})
+			}"#.to_string() );
+		
+		let result = super::compile(src, &map);
+		println!("{}",result.unwrap());
+	}
 }

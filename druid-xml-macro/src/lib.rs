@@ -18,10 +18,25 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 	}
 
 	//like syn::Arm
+	// old style : but we want avoid type annotation
+	//
+	//druid_xml!( r#"
+	//",
+	//"button" => |btn:Button::<()> | {
+	///   println!("On clicked");
+	//});
+	// struct WidgetWrapper {
+	// 	query : syn::LitStr,
+	// 	sep : Token![=>],
+	// 	bindfn : syn::ExprClosure,
+	// 	sepe : Option<Token![,]>,
+	// }
+
+	//
 	struct WidgetWrapper {
 		query : syn::LitStr,
 		sep : Token![=>],
-		bindfn : syn::ExprClosure,
+		bindfn : syn::ExprBlock,
 		sepe : Option<Token![,]>,
 	}
 
