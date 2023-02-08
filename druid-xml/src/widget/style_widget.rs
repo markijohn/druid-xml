@@ -213,7 +213,6 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 				for ps in self.styles.as_mut() {
 					if let Some(ps) = ps {
 						let neg = match ps.pseudo {
-							Pseudo::Normal => true,
 							Pseudo::Focus => !has_focus,
 							Pseudo::Hover => !is_hover,
 							Pseudo::Active => !is_active,
