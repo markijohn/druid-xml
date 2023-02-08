@@ -237,7 +237,7 @@ impl DrawableStack {
                 FillMethod::RadialGradient(brush) => { ctx.fill(shape, brush); },
             }
             if let Some(border) = border.as_ref() {
-                ctx.stroke_styled(shape, &border.color, border.width, &border.style);
+                ctx.stroke_styled(shape, &border.color, border.width, &StrokeStyle::default());
             }
         }
 
@@ -262,7 +262,7 @@ impl DrawableStack {
                     let mcvar = &mut cvar;
                     let center = center.calc(mcvar);
                     let arc = Arc { center: Point { x: center.0, y: center.0 }, radii: radi.to_vec2(mcvar), start_angle: start_angle.calc(mcvar), sweep_angle: sweep_angle.calc(mcvar), x_rotation: x_rot.calc(mcvar) };
-                    ctx.stroke_styled(arc, &border.color, border.width, &border.style);
+                    ctx.stroke_styled(arc, &border.color, border.width, &StrokeStyle::default());
                 }
                 Drawable::Line { start, end, style } => {
                     let start = start.as_ref().map( |e| e.calc( &mut cvar ) ).unwrap_or( last_point );
@@ -270,7 +270,7 @@ impl DrawableStack {
                     last_point = end;
                     let style = style.as_ref().unwrap_or( &last_style );
                     //let style = style.as_ref().unwrap_or( &def_stroke );
-                    ctx.stroke_styled( Line::new( start, end ), &style.color, style.width, &style.style );
+                    ctx.stroke_styled( Line::new( start, end ), &style.color, style.width, &StrokeStyle::default() );
                 },
             }
         }

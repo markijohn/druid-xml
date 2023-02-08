@@ -1,0 +1,32 @@
+<html>
+<style>
+
+.btn1 { background-color:rgb(255,255,255); transition:1s background-color; }
+.btn1:hover { background-color:rgb(0,255,0); transition:1s background-color; border:0px}
+.btn1:active { background-color:rgb(0,0,255);  border:2px solid black; transition:1s background-color, 1s border;}
+.btn1:disabled { background-color:rgb(80,80,80); transition:1s background-color; }
+
+
+label:hover { background-color:rgb(0,255,0); 
+border:2px solid yellow; transition:1s background-color, 1s border; }
+label:active { background-color:rgb(0,0,255); transition:1s background-color; }
+label:disabled { background-color:rgb(80,80,80); transition:1s background-color; }
+
+</style>
+
+<script>
+function disable(cls) {
+	var flag = document.querySelector(cls).disabled;
+	document.querySelector(cls).disabled = !flag;
+}
+</script>
+
+<hr/>
+<h5>
+hover , active, disabled
+</h5>
+<button class="btn1">12345</button>
+<button onclick="disable('btn1')">disable</button>
+<br/><label class="btn">12345</label>
+
+</html>

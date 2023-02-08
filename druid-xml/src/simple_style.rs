@@ -4,7 +4,7 @@ use std::{rc::Rc, ops::{Deref, DerefMut}, time::Duration};
 
 use druid::{Size, Insets, Color, Rect, piet::StrokeStyle};
 
-use crate::curve::AnimationCurve;
+use crate::{curve::AnimationCurve};
 
 #[derive(Clone,Copy)]
 pub enum JumpTerm {
@@ -203,35 +203,42 @@ impl Transit for Color {
 
 impl Transit for BorderStyle {
     fn transit(self, target:Self, alpha:f64) -> Self {
-        let diff_width = target.width - self.width;
-        let diff_radius = target.radius - self.radius;
-        let self_rgba = self.color.as_rgba_u32();
-        let diff_rgba = target.color.as_rgba_u32() - self_rgba;
-        BorderStyle { style: self.style, 
-            width: self.width + diff_width * alpha,
-            radius: self.radius + diff_radius * alpha,
-            color: Color::from_rgba32_u32( self_rgba + (diff_rgba as f64 * alpha) as u32 )
+        BorderStyle { 
+            width: self.width.transit(target.width, alpha),
+            radius: self.radius.transit(target.radius, alpha),
+            color: self.color.transit(target.color, alpha)
         }
     }
 }
 
-#[derive(Debug,Clone)]
+impl <T:Transit> Transit for Option<T> {
+    fn transit(self, target:Self, alpha:f64) -> Self {
+        match (self, target) {
+            (None, None) => None,
+            (None, Some(t)) => Some(t),
+            (Some(s), None) => Some(s),
+            (Some(s), Some(t)) => Some(s.transit(t,alpha)),
+        }
+    }
+}
+
+#[derive(Debug,Clone,Copy)]
 pub struct BorderStyle {
-    pub style : StrokeStyle,
     pub width: f64,
     pub radius : f64,
     pub color: Color,
 }
 
 impl BorderStyle {
-    pub fn new(style:StrokeStyle, width:f64, radius:f64, color:impl Into<Color>) -> Self {
-        Self { style, width, radius , color : color.into()}
+    pub fn new(width:f64, radius:f64, color:impl Into<Color>) -> Self {
+        Self { width, radius , color : color.into()}
     }
 }
 
+
 impl Default for BorderStyle {
     fn default() -> Self {
-        Self { style: Default::default(), width: 1f64, radius:0f64, color: Color::rgb8(0,0,0) }
+        Self { width: 1f64, radius:0f64, color: Color::rgb8(0,0,0) }
     }
 }
 
@@ -246,6 +253,81 @@ pub struct Styler {
     pub border : (Option<BorderStyle>,Option<AnimationState>),
 }
 
+
+pub struct Style {
+	pub padding : Insets,
+    pub margin : Insets,
+    pub font_size : f64,
+    pub width : Option<f64>,
+    pub height : Option<f64>,
+    pub text_color : Color,
+    pub background_color : Color,
+    pub border : BorderStyle,
+}
+
+impl Style {
+    pub fn transit(&mut self, target:&mut Styler) -> (bool,bool,bool) {
+        let mut layout_updated = false;
+        let mut paint_updated = false;
+        let mut has_next_anim = false;
+
+        macro_rules! transit_style {
+            ($item:ident) => {
+                match &mut target.$item {
+                    ( Some(target_style), Some(target_anim) ) => {
+                        let transit = my_anim.transit(my_style.clone(), target_style.clone(), elapsed);
+                        self.$item = transit.1.into();
+                        (true, transit.0)
+                    }
+                    ( Some(_), None) => {
+                        self.$item = target_style.clone().into();
+                        (true, false)
+                    }
+                    _ => (false, false)
+                }
+            }
+        }
+
+        let result = transit_style!( padding );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( margin );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( font_size );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( width );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( height );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( text_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( background_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( border );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        (layout_updated, paint_updated, has_next_anim)
+    }
+}
 
 impl Styler {
     pub fn get_padding(&self) -> Option<Insets> {
@@ -463,6 +545,69 @@ impl Styler {
             StyleQueryResult::none(false)
         }
     }
+
+    pub fn transit(&mut self, elapsed:i64, styler:&mut Styler, build:&mut Style) -> (bool,bool,bool) {
+        let mut layout_updated = false;
+        let mut paint_updated = false;
+        let mut has_next_anim = false;
+
+        macro_rules! transit_style {
+            ($item:ident) => {
+                match (&mut self.$item, &mut styler.$item) {
+                    ( (Some(my_style), Some(my_anim)), (Some(target_style), _) ) => {
+                        let transit = my_anim.transit(my_style.clone(), target_style.clone(), elapsed);
+                        build.$item = transit.1.into();
+                        (true, transit.0)
+                    }
+                    ( (Some(_), None), (Some(target_style), None) ) => {
+                        build.$item = target_style.clone().into();
+                        (true, false)
+                    }
+                    _ => (false, false)
+                }
+            }
+        }
+
+        let result = transit_style!( padding );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( margin );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( font_size );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( width );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( height );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( text_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( background_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( border );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        (layout_updated, paint_updated, has_next_anim)
+    }
+
 }
 
 

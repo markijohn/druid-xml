@@ -84,7 +84,7 @@ fn main() {
 		height: (None,None),
 		text_color: (None,None),
 		background_color: (Some(Color::rgb8(255,0,0)), None ),
-		border: (Some(BorderStyle {style:Default::default(), width:2., radius:1., color:Color::rgb8(255,255,255) }),None),
+		border: (Some(BorderStyle { width:2., radius:1., color:Color::rgb8(255,255,255) }),None),
 	};
 	let pseudo_styles = [
 		Some(PseudoStyle::active( Styler {
@@ -105,7 +105,7 @@ fn main() {
 			height: (None,None),
 			text_color: (None,None),
 			background_color: (Some(Color::rgb8(0,0,255)),None),
-			border: (Some(BorderStyle {style:Default::default(), width:3., radius:5., color:Color::rgb8(0,0,255) }),None),
+			border: (Some(BorderStyle { width:3., radius:5., color:Color::rgb8(0,0,255) }),None),
 		})),
 		None
 	];
