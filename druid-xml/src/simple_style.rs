@@ -165,6 +165,8 @@ impl Transit for f64 {
         let diff = target - self;
         self + diff * alpha
     }
+
+    
 }
 
 impl Transit for Insets {
@@ -474,6 +476,11 @@ impl Styler {
         clear_state!(text_color);
         clear_state!(background_color);
         clear_state!(border);
+    }
+
+    pub fn apply_style(&self, start:&Style, end:&Style, curr:&mut Style, elapsed:i64, duration:i64) {
+        let alpha = elapsed as f64 / duration as f64;
+        curr.transit()
     }
 
 
