@@ -1,39 +1,9 @@
-use crate::simple_style::{Styler, BorderStyle, Style};
+use crate::simple_style::{Styler, BorderStyle, Style, PseudoStyle, Pseudo};
 use druid::kurbo::{Insets, Point, Rect, Size, RoundedRect};
 use druid::widget::Axis;
 use druid::{BoxConstraints, Color, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx,
     RenderContext, UpdateCtx, Widget, WidgetPod, MouseButton};
 use super::theme;
-
-enum Pseudo {
-	Focus,
-	Hover,
-	Active,
-	Disabled
-}
-
-pub struct PseudoStyle {
-	pseudo : Pseudo,
-	style : Styler
-}
-
-impl PseudoStyle {
-	pub fn hover(src:Styler) -> Self {
-		Self {pseudo:Pseudo::Hover, style:src}
-	}
-
-	pub fn focus(src:Styler) -> Self {
-		Self {pseudo:Pseudo::Focus, style:src}
-	}
-
-	pub fn active(src:Styler) -> Self {
-		Self {pseudo:Pseudo::Active, style:src}
-	}
-
-	pub fn disabled(src:Styler) -> Self {
-		Self {pseudo:Pseudo::Disabled, style:src}
-	}
-}
 
 /// A StyleWidget for `hover` and `animation` effect
 /// This widget changed `Env` and support `Padding` and `Conatainer`
@@ -41,16 +11,29 @@ impl PseudoStyle {
 /// Forced order is 'normal(none pseudo)' -> disabled -> {user defined styles..}
 pub struct SimpleStyleWidget<T,W> {
 	normal_style : Styler,
-	styles : [Option<PseudoStyle>;5],
+	styles : [Option<PseudoStyle>;4],
+
+	last_focus : bool,
+	last_hover : bool,
+	last_active : bool,
+	last_disabled : bool,
+
+	has_focus_style : bool,
+	has_hover_style : bool,
+	has_active_style : bool,
+	has_disabled_style : bool,
+
 	style_updated : u64,
-	style : Style,
+	start_style : Style,
+	end_style : Style,
+	curr_style : Style,
 	last_point : Point,
 	inner_size : Rect,
 	inner : WidgetPod<T,W>
 }
 
 impl<T,W:Widget<T>> SimpleStyleWidget<T,W> {
-    pub fn new(normal_style:Styler, styles:[Option<PseudoStyle>;5], inner: W) -> SimpleStyleWidget<T,W> {
+    pub fn new(normal_style:Styler, styles:[Option<PseudoStyle>;4], inner: W) -> SimpleStyleWidget<T,W> {
 		let padding = normal_style.get_padding().unwrap_or_default();
 		let margin = normal_style.get_margin().unwrap_or_default();
 		let font_size = normal_style.get_font_size().unwrap_or( 14. );
@@ -59,20 +42,49 @@ impl<T,W:Widget<T>> SimpleStyleWidget<T,W> {
 		let text_color = normal_style.get_text_color().unwrap_or( Color::rgba8(0, 0, 0, 255) );
 		let background_color = normal_style.get_background_color().unwrap_or( Color::rgba8(0, 0, 0, 0) );
 		let border = normal_style.get_border().unwrap_or_default();
+		let start_style = Style {
+			padding,
+			margin,
+			font_size,
+			width,
+			height,
+			text_color,
+			background_color,
+			border,
+		};
+		let end_style = start_style.clone();
+		let curr_style = start_style.clone();
+
+		let mut has_focus_style = false;
+		let mut has_hover_style = false;
+		let mut has_active_style = false;
+		let mut has_disabled_style = false;
+		for s in styles.iter() {
+			if let Some(s) = s {
+				match s.pseudo {
+					Pseudo::Focus => has_focus_style = true,
+					Pseudo::Hover => has_hover_style = true,
+					Pseudo::Active => has_active_style = true,
+					Pseudo::Disabled => has_disabled_style = true,
+    			}
+			}
+		}
+
 		SimpleStyleWidget {
 			normal_style,
 			styles,
-			style_updated : theme::STYLE_UPDATED_NONE,
-			style : Style {
-				padding,
-				margin,
-				font_size,
-				width,
-				height,
-				text_color,
-				background_color,
-				border,
-			},
+			last_focus : false,
+			last_hover : false,
+			last_active : false,
+			last_disabled : false,
+			has_focus_style,
+			has_hover_style,
+			has_active_style,
+			has_disabled_style,
+			style_updated : theme::STYLE_UPDATED_LAYOUT,
+			start_style,
+			end_style,
+			curr_style,
 			last_point : Point::default(),
 			inner_size : Rect::new(0., 0., 0., 0.),
 			inner : WidgetPod::new(inner)
@@ -203,39 +215,109 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 			_ => ()
 		};
 		
+		let on_trigger = false;
 		let has_focus = ctx.has_focus() && is_inner;
 		let is_hover = ctx.is_hot()  && is_inner;
 		let is_active = ctx.is_active();
 		let is_disabled = ctx.is_disabled();
+		let has_state = has_focus | is_hover | is_active | is_disabled;
+
+		if self.has_focus_style && self.last_focus != has_focus {
+			self.last_focus = has_focus;
+			on_trigger = true;
+		}
+
+		if self.has_hover_style && self.last_hover != is_hover {
+			self.last_hover = is_hover;
+			on_trigger = true;
+		}
+
+		if self.has_active_style && self.last_active != is_active {
+			self.last_active = is_active;
+			on_trigger = true;
+		}
+
+		if self.has_disabled_style && self.last_disabled != is_hover {
+			self.last_disabled = is_disabled;
+			on_trigger = true;
+		}
+
+		if on_trigger {
+			ctx.request_anim_frame();
+
+			//clear animation state
+			//dont need this
+			// self.normal_style.set_progress_state(0f64);
+			// for style in self.styles.iter_mut() {
+			// 	if let Some(style) = style {
+			// 		style.style.set_progress_state(0f64);
+			// 	}
+			// }
+
+			//set start style to goal style
+			self.start_style = self.end_style;
+
+			//make new target style
+			self.end_style = self.normal_style.composite_styles( self.styles.iter()
+				.filter( |e|
+					if let Some(e) = e{
+						match e.pseudo {
+							Pseudo::Focus => has_focus,
+							Pseudo::Hover => is_hover,
+							Pseudo::Active => is_active,
+							Pseudo::Disabled => is_disabled,
+						}
+					} else {
+						false
+					}
+				)
+				.map( |e| &e.unwrap().style )
+				.filter( |e| {
+					true
+				})
+			);
+		}
+
+		
 		
 		match event {
 			Event::AnimFrame(e) => {
-				for ps in self.styles.as_mut() {
-					if let Some(ps) = ps {
-						let neg = match ps.pseudo {
-							Pseudo::Focus => !has_focus,
-							Pseudo::Hover => !is_hover,
-							Pseudo::Active => !is_active,
-							Pseudo::Disabled => !is_disabled,
-						};
-
-						let elapsed = if neg {
-							*e as i64 * -1
-						} else {
-							*e as i64
-						};
-
-						let (request_layout, request_paint, request_anim) = self.style.transit( elapsed, ps.style );
-						if request_layout {
-							ctx.request_layout();
-						}
-						if request_paint {
-							ctx.request_paint();
-						}
-						if request_anim {
-							ctx.request_anim_frame();
+				let (mut request_layout, mut request_paint, mut request_anim) = (false, false, false);
+				if !has_state {
+					let result = self.curr_style.transit(&self.start_style, &self.end_style, *e, &self.normal_style);
+					request_layout |= result.0;
+					request_paint |= result.1;
+					request_anim |= result.2;
+				} else {
+					for ps in self.styles.as_mut() {
+						if let Some(ps) = ps {
+							let matched = match ps.pseudo {
+								Pseudo::Focus => has_focus,
+								Pseudo::Hover => is_hover,
+								Pseudo::Active => is_active,
+								Pseudo::Disabled => is_disabled,
+							};
+	
+							if !matched {
+								continue
+							}
+	
+							let result = self.base_style.composite_transit( *e as _,&mut ps.style, &mut self.normal_style,&mut self.curr_style );
+							request_layout |= result.0;
+							request_paint |= result.1;
+							request_anim |= result.2;
 						}
 					}
+				}
+				
+				if request_layout {
+					ctx.request_layout();
+				}
+				if request_paint {
+					ctx.request_paint();
+				}
+				if request_anim {
+					ctx.request_anim_frame();
 				}
 			}
 			_ => {
@@ -258,11 +340,11 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env) -> Size {
 		let mut wrapped_env = env.clone();
-		wrapped_env.set( super::theme::PADDING, self.style.padding );
+		wrapped_env.set( super::theme::PADDING, self.curr_style.padding );
 		let env = &wrapped_env;
-		let (mt,mr,mb,ml) = (self.style.margin.y0, self.style.margin.x1, self.style.margin.y1, self.style.margin.x0);
+		let (mt,mr,mb,ml) = (self.curr_style.margin.y0, self.curr_style.margin.x1, self.curr_style.margin.y1, self.curr_style.margin.x0);
 		let child_bc = bc.shrink( (ml+mr, mt+mb) );
-		let size = self.inner.layout(ctx, &child_bc, data, &wrapped_padding_env(env, self.style_updated,&self.style));
+		let size = self.inner.layout(ctx, &child_bc, data, &wrapped_padding_env(env, self.style_updated,&self.curr_style));
 		let origin = Point::new(ml, mt);
 		self.inner.set_origin(ctx, origin);
 
@@ -282,19 +364,19 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
-		let (mt,mr,mb,ml) = (self.style.margin.y0, self.style.margin.x1, self.style.margin.y1, self.style.margin.x0);
+		let (mt,mr,mb,ml) = (self.curr_style.margin.y0, self.curr_style.margin.x1, self.curr_style.margin.y1, self.curr_style.margin.x0);
 		let size = ctx.size();
 
-		if self.style.border.width > 0. {
-			let rr = RoundedRect::new(ml, mt, size.width, size.height, self.style.border.radius);
-			ctx.fill(rr, &self.style.background_color);
-			ctx.stroke_styled(rr, &self.style.border.color, self.style.border.width, &druid::piet::StrokeStyle::default());
+		if self.curr_style.border.width > 0. {
+			let rr = RoundedRect::new(ml, mt, size.width, size.height, self.curr_style.border.radius);
+			ctx.fill(rr, &self.curr_style.background_color);
+			ctx.stroke_styled(rr, &self.curr_style.border.color, self.curr_style.border.width, &druid::piet::StrokeStyle::default());
 		} else {
 			let r = Rect::new(ml, mt, size.width-mr, size.height-mb);
-			ctx.fill(r, &self.style.background_color);
+			ctx.fill(r, &self.curr_style.background_color);
 		}
 
-        self.inner.paint(ctx, data, &wrapped_padding_env(env, self.style_updated,&self.style));
+        self.inner.paint(ctx, data, &wrapped_padding_env(env, self.style_updated,&self.curr_style));
     }
 
 	fn compute_max_intrinsic(
@@ -305,7 +387,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
         data: &T,
         env: &Env,
     ) -> f64 {
-		let margin = self.style.margin;
+		let margin = self.curr_style.margin;
 
 		let child_bc = bc.shrink( (margin.x0+margin.x1, margin.y0+margin.y1) );
         self

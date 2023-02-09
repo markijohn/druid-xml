@@ -54,7 +54,7 @@ pub fn main() {
         </flex>
         "#
         ,
-        ".ok" => |widget:druid::widget::SizedBox<_>| {
+        ".ok" => {
             widget.on_click( |ctx,data,env| {
                 println!("Clicked login");
             })

@@ -43,6 +43,7 @@ fn main() {
 			border: (None,None),
 		})),
 		None,
+		None,
 		None
 	];
 	//let origin = DXLabel::new("Margin Animation").padding(druid_xml::widget::theme::PADDING ).on_click( |ctx, data,env| println!("Clicked2"));
@@ -71,6 +72,7 @@ fn main() {
 			border: (None,None),
 		})),
 		None,
+		None,
 		None
 	];
 	let origin = DXLabel::new("Padding Animation").padding(theme::PADDING ).on_click( |ctx, data,env| println!("Clicked"));
@@ -87,16 +89,7 @@ fn main() {
 		border: (Some(BorderStyle { width:2., radius:1., color:Color::rgb8(255,255,255) }),None),
 	};
 	let pseudo_styles = [
-		Some(PseudoStyle::active( Styler {
-			padding: (None, None ),
-			margin: (None,None),
-			font_size: (None, None ),
-			width: (None,None),
-			height: (None,None),
-			text_color: (None,None),
-			background_color: (Some(Color::rgb8(0,255,0)),None),
-			border: (None,None),
-		})),
+		
 		Some(PseudoStyle::hover( Styler {
 			padding: (None, None ),
 			margin: (None,None),
@@ -107,6 +100,17 @@ fn main() {
 			background_color: (Some(Color::rgb8(0,0,255)),None),
 			border: (Some(BorderStyle { width:3., radius:5., color:Color::rgb8(0,0,255) }),None),
 		})),
+		Some(PseudoStyle::active( Styler {
+			padding: (None, None ),
+			margin: (None,None),
+			font_size: (None, None ),
+			width: (None,None),
+			height: (None,None),
+			text_color: (None,None),
+			background_color: (Some(Color::rgb8(0,255,0)),None),
+			border: (None,None),
+		})),
+		None,
 		None
 	];
 	let origin = DXButton::new("None Animation").padding(theme::PADDING ).on_click( |ctx, data,env| println!("Clicked"));

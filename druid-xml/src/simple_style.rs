@@ -242,6 +242,37 @@ impl Default for BorderStyle {
     }
 }
 
+#[derive(Clone,Copy)]
+pub enum Pseudo {
+	Focus,
+	Hover,
+	Active,
+	Disabled
+}
+
+pub struct PseudoStyle {
+	pub pseudo : Pseudo,
+	pub style : Styler
+}
+
+impl PseudoStyle {
+	pub fn hover(src:Styler) -> Self {
+		Self {pseudo:Pseudo::Hover, style:src}
+	}
+
+	pub fn focus(src:Styler) -> Self {
+		Self {pseudo:Pseudo::Focus, style:src}
+	}
+
+	pub fn active(src:Styler) -> Self {
+		Self {pseudo:Pseudo::Active, style:src}
+	}
+
+	pub fn disabled(src:Styler) -> Self {
+		Self {pseudo:Pseudo::Disabled, style:src}
+	}
+}
+
 pub struct Styler {
     pub padding : (Option<Insets>,Option<AnimationState>),
     pub margin : (Option<Insets>,Option<AnimationState>),
@@ -253,7 +284,7 @@ pub struct Styler {
     pub border : (Option<BorderStyle>,Option<AnimationState>),
 }
 
-
+#[derive(Clone)]
 pub struct Style {
 	pub padding : Insets,
     pub margin : Insets,
@@ -266,7 +297,71 @@ pub struct Style {
 }
 
 impl Style {
-    pub fn transit(&mut self, target:&mut Styler) -> (bool,bool,bool) {
+    pub fn composite_transit(&self, elapsed:i64, target:&mut Styler, default_target:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
+        let mut layout_updated = false;
+        let mut paint_updated = false;
+        let mut has_next_anim = false;
+
+        macro_rules! transit_style {
+            ($item:ident) => { {
+                let style = target.$item.0.as_mut().or( default_target.$item.0.as_mut() );
+                let anim = target.$item.1.as_mut().or( default_target.$item.1.as_mut() );
+                match (style, anim) {
+                    ( Some(target_style), Some(target_anim) ) => {
+                        let transit = target_anim.transit( self.$item, target_style.clone(), elapsed);
+                        out.$item = transit.1.into();
+                        (true, transit.0)
+                    }
+                    ( Some(target_style), None) => {
+                        out.$item = target_style.clone().into();
+                        (true, false)
+                    }
+                    _ => (false, false)
+                }
+            } }
+        }
+
+        let result = transit_style!( padding );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( margin );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( font_size );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        // let result = transit_style!( width );
+        // layout_updated |= result.0;
+        // paint_updated |= result.0;
+        // has_next_anim |= result.1;
+
+        // let result = transit_style!( height );
+        // layout_updated |= result.0;
+        // paint_updated |= result.0;
+        // has_next_anim |= result.1;
+
+        let result = transit_style!( text_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( background_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( border );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        (layout_updated, paint_updated, has_next_anim)
+    }
+
+    pub fn transit(&self, elapsed:i64, target:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
         let mut layout_updated = false;
         let mut paint_updated = false;
         let mut has_next_anim = false;
@@ -275,12 +370,12 @@ impl Style {
             ($item:ident) => {
                 match &mut target.$item {
                     ( Some(target_style), Some(target_anim) ) => {
-                        let transit = my_anim.transit(my_style.clone(), target_style.clone(), elapsed);
-                        self.$item = transit.1.into();
+                        let transit = target_anim.transit( self.$item, target_style.clone(), elapsed);
+                        out.$item = transit.1.into();
                         (true, transit.0)
                     }
-                    ( Some(_), None) => {
-                        self.$item = target_style.clone().into();
+                    ( Some(target_style), None) => {
+                        out.$item = target_style.clone().into();
                         (true, false)
                     }
                     _ => (false, false)
@@ -303,15 +398,15 @@ impl Style {
         paint_updated |= result.0;
         has_next_anim |= result.1;
 
-        let result = transit_style!( width );
-        layout_updated |= result.0;
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
+        // let result = transit_style!( width );
+        // layout_updated |= result.0;
+        // paint_updated |= result.0;
+        // has_next_anim |= result.1;
 
-        let result = transit_style!( height );
-        layout_updated |= result.0;
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
+        // let result = transit_style!( height );
+        // layout_updated |= result.0;
+        // paint_updated |= result.0;
+        // has_next_anim |= result.1;
 
         let result = transit_style!( text_color );
         paint_updated |= result.0;
@@ -330,6 +425,58 @@ impl Style {
 }
 
 impl Styler {
+    pub fn composite_styles<'a, I:Iterator<Item=&'a Styler>>(&self, iter:I) -> Style {
+        macro_rules! composite {
+            ($styler:ident, $item:ident) => {
+                if let (Some(style),_) = $styler.$item {
+                    style
+                } else {
+                    $item
+                }
+            }
+        }
+        let mut padding = self.get_padding().unwrap_or_default();
+		let mut margin = self.get_margin().unwrap_or_default();
+		let mut font_size = self.get_font_size().unwrap_or( 14. );
+		let mut width = self.get_width();
+		let mut height = self.get_height();
+		let mut text_color = self.get_text_color().unwrap_or( Color::rgba8(0, 0, 0, 255) );
+		let mut background_color = self.get_background_color().unwrap_or( Color::rgba8(0, 0, 0, 0) );
+		let mut border = self.get_border().unwrap_or_default();
+        for style in iter {
+            composite!( style, padding );
+        }
+        Style {
+			padding,
+			margin,
+			font_size,
+			width,
+			height,
+			text_color,
+			background_color,
+			border,
+		}
+    }
+
+    pub fn set_progress_state(&mut self, state:f64) {
+        macro_rules! clear_state {
+            ($item:ident) => {
+                if let (_,Some(anim)) = self.$item {
+                    anim.elapsed = (anim.anim.duration as f64 * state) as _;
+                }
+            }
+        }
+        clear_state!(padding);
+        clear_state!(margin);
+        clear_state!(font_size);
+        clear_state!(width);
+        clear_state!(height);
+        clear_state!(text_color);
+        clear_state!(background_color);
+        clear_state!(border);
+    }
+
+
     pub fn get_padding(&self) -> Option<Insets> {
         self.padding.0
     }
@@ -546,7 +693,7 @@ impl Styler {
         }
     }
 
-    pub fn transit(&mut self, elapsed:i64, styler:&mut Styler, build:&mut Style) -> (bool,bool,bool) {
+    pub fn transit(&mut self, elapsed:i64, styler:&mut Styler, start:&Style, build:&mut Style) -> (bool,bool,bool) {
         let mut layout_updated = false;
         let mut paint_updated = false;
         let mut has_next_anim = false;
