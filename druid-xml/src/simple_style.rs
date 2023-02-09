@@ -304,7 +304,7 @@ impl Style {
         let mut paint_updated = false;
         let mut has_next_anim = false;
 
-        macro_rules! transit_style {
+        macro_rules! composite {
             ($item:ident) => { {
                 let style = target.$item.0.as_mut().or( default_target.$item.0.as_mut() );
                 let anim = target.$item.1.as_mut().or( default_target.$item.1.as_mut() );
@@ -323,17 +323,17 @@ impl Style {
             } }
         }
 
-        let result = transit_style!( padding );
+        let result = composite!( padding );
         layout_updated |= result.0;
         paint_updated |= result.0;
         has_next_anim |= result.1;
 
-        let result = transit_style!( margin );
+        let result = composite!( margin );
         layout_updated |= result.0;
         paint_updated |= result.0;
         has_next_anim |= result.1;
 
-        let result = transit_style!( font_size );
+        let result = composite!( font_size );
         layout_updated |= result.0;
         paint_updated |= result.0;
         has_next_anim |= result.1;
@@ -348,22 +348,26 @@ impl Style {
         // paint_updated |= result.0;
         // has_next_anim |= result.1;
 
-        let result = transit_style!( text_color );
+        let result = composite!( text_color );
         paint_updated |= result.0;
         has_next_anim |= result.1;
 
-        let result = transit_style!( background_color );
+        let result = composite!( background_color );
         paint_updated |= result.0;
         has_next_anim |= result.1;
 
-        let result = transit_style!( border );
+        let result = composite!( border );
         paint_updated |= result.0;
         has_next_anim |= result.1;
 
         (layout_updated, paint_updated, has_next_anim)
     }
 
-    pub fn transit(&self, elapsed:i64, target:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
+    pub fn transit(&self, elapsed:i64, start:&Style, end:&Style, styler:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
+todo!()
+    }
+
+    pub fn transit2(&self, elapsed:i64, target:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
         let mut layout_updated = false;
         let mut paint_updated = false;
         let mut has_next_anim = false;
@@ -446,7 +450,14 @@ impl Styler {
 		let mut background_color = self.get_background_color().unwrap_or( Color::rgba8(0, 0, 0, 0) );
 		let mut border = self.get_border().unwrap_or_default();
         for style in iter {
-            composite!( style, padding );
+            padding = composite!( style, padding );
+            margin = composite!( style, margin );
+            font_size = composite!( style, font_size );
+            // width = composite!( style, width );
+            // height = composite!( style, height );
+            text_color = composite!( style, text_color );
+            background_color = composite!( style, background_color );
+            border = composite!( style, border );
         }
         Style {
 			padding,
@@ -476,11 +487,6 @@ impl Styler {
         clear_state!(text_color);
         clear_state!(background_color);
         clear_state!(border);
-    }
-
-    pub fn apply_style(&self, start:&Style, end:&Style, curr:&mut Style, elapsed:i64, duration:i64) {
-        let alpha = elapsed as f64 / duration as f64;
-        curr.transit()
     }
 
 

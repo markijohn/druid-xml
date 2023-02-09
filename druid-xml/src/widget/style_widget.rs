@@ -26,6 +26,7 @@ pub struct SimpleStyleWidget<T,W> {
 	style_updated : u64,
 	start_style : Style,
 	end_style : Style,
+	base_style : Style,
 	curr_style : Style,
 	last_point : Point,
 	inner_size : Rect,
@@ -53,6 +54,7 @@ impl<T,W:Widget<T>> SimpleStyleWidget<T,W> {
 			border,
 		};
 		let end_style = start_style.clone();
+		let base_style = start_style.clone();
 		let curr_style = start_style.clone();
 
 		let mut has_focus_style = false;
@@ -84,6 +86,7 @@ impl<T,W:Widget<T>> SimpleStyleWidget<T,W> {
 			style_updated : theme::STYLE_UPDATED_LAYOUT,
 			start_style,
 			end_style,
+			base_style,
 			curr_style,
 			last_point : Point::default(),
 			inner_size : Rect::new(0., 0., 0., 0.),
@@ -215,7 +218,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 			_ => ()
 		};
 		
-		let on_trigger = false;
+		let mut on_trigger = false;
 		let has_focus = ctx.has_focus() && is_inner;
 		let is_hover = ctx.is_hot()  && is_inner;
 		let is_active = ctx.is_active();
@@ -255,7 +258,8 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 			// }
 
 			//set start style to goal style
-			self.start_style = self.end_style;
+			self.start_style = self.end_style.clone();
+			self.base_style = self.curr_style.clone();
 
 			//make new target style
 			self.end_style = self.normal_style.composite_styles( self.styles.iter()
@@ -271,7 +275,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 						false
 					}
 				)
-				.map( |e| &e.unwrap().style )
+				.map( |e| &e.as_ref().unwrap().style )
 				.filter( |e| {
 					true
 				})
@@ -284,7 +288,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 			Event::AnimFrame(e) => {
 				let (mut request_layout, mut request_paint, mut request_anim) = (false, false, false);
 				if !has_state {
-					let result = self.curr_style.transit(&self.start_style, &self.end_style, *e, &self.normal_style);
+					let result = self.base_style.transit(*e as _, &self.start_style, &self.end_style,  &mut self.normal_style, &mut self.curr_style);
 					request_layout |= result.0;
 					request_paint |= result.1;
 					request_anim |= result.2;
