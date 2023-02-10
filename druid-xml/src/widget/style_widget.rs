@@ -208,7 +208,6 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 				})
 			);
 		}
-
 		
 		
 		match event {

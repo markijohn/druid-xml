@@ -436,6 +436,20 @@ impl Style {
                     }
                     _ => (false, false)
                 }
+            };
+            ($item:ident) => {
+                match &mut target.$item {
+                    ( Some(target_style), Some(target_anim) ) => {
+                        let transit = target_anim.transit( self.$item, target_style.clone(), elapsed);
+                        out.$item = transit.1.into();
+                        (true, transit.0)
+                    }
+                    ( Some(target_style), None) => {
+                        out.$item = target_style.clone().into();
+                        (true, false)
+                    }
+                    _ => (false, false)
+                }
             }
         }
 
