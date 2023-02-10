@@ -24,7 +24,7 @@ fn main() {
 			bottom:Number::Rel(1f64),
 			left:Number::from_str("calc(100% - 20)").unwrap(),
 			border: Some(BorderStyle::new(
-				StrokeStyle{ line_join: Default::default(), line_cap: Default::default(), dash_pattern: Default::default(), dash_offset: 0.5 } ,
+				//StrokeStyle{ line_join: Default::default(), line_cap: Default::default(), dash_pattern: Default::default(), dash_offset: 0.5 } ,
 				2f64,
 				0.,
 				Color::rgb8(0,0,0)
@@ -35,12 +35,16 @@ fn main() {
 		,Drawable::Circle { 
 			center: QVec2::from("35", "15").unwrap(), 
 			radius: Number::Abs(15.), 
-			border: Some(BorderStyle::new(Default::default(), 3. , 0., col_blue ) ), 
+			border: Some(BorderStyle::new(
+				//Default::default(), 
+				3. , 0., col_blue ) ), 
 			fill: FillMethod::Solid( col_white ) }
 
 		,Drawable::Ellipse {
 			center:QVec2::from("50%","15").unwrap(),
-			border:Some(BorderStyle::new(Default::default(),3., 0., col_blue)),
+			border:Some(BorderStyle::new(
+				//Default::default(),
+				3., 0., col_blue)),
 			fill:FillMethod::Solid(col_white), 
 			radi: QVec2::from("13","15").unwrap(), 
 			x_rot: Number::Abs(0.7) }

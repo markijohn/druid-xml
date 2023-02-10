@@ -158,6 +158,8 @@ pub trait Transit {
     /// `interval` how to elapsed time
     /// (bool,Self) first bool is reach the end. Self is calculate value
     fn transit(self, target:Self, alpha:f64) -> Self;
+
+    fn alpha(self, target:Self, status:Self) -> f64;
 }
 
 impl Transit for f64 {
@@ -166,8 +168,30 @@ impl Transit for f64 {
         self + diff * alpha
     }
 
-    
+    fn alpha(self, target:Self, status:Self) -> Self {
+        let alpha = (status.max(self).min(target) - self) / (target - self);
+
+        // let total = target.max(self) - target.min(self);
+        // let stat = target.max(status) - target.min(status);
+        // let alpha = 1. - total.min( stat ) / total;
+
+        alpha
+    }
 }
+
+impl Transit for u8 {
+    fn transit(self, target:Self, alpha:f64) -> Self {
+        let diff = target - self;
+        (self as f64 + diff as f64 * alpha) as _
+    }
+
+    fn alpha(self, target:Self, status:Self) -> f64 {
+        let total = target.abs_diff(self);
+        let stat = target.abs_diff(status);
+        1. - total.min( stat ) as f64 / total as f64
+    }
+}
+
 
 impl Transit for Insets {
     fn transit(self, target:Self, alpha:f64) -> Self {
@@ -183,6 +207,13 @@ impl Transit for Insets {
             x1: self.x1 + diff_x1 * alpha, 
             y1: self.y1 + diff_y1 * alpha 
         }
+    }
+
+    fn alpha(self, target:Self, status:Self) -> f64 {
+        self.x0.alpha(target.x0, status.x0)
+        .max( self.y0.alpha(target.y0, status.y0) )
+        .max( self.x1.alpha(target.x1, status.x1) )
+        .max( self.y1.alpha(target.y1, status.y1) )
     }
 }
 
@@ -201,6 +232,17 @@ impl Transit for Color {
         (self_into.3 as i16+diff_a) as _
         )
     }
+
+    fn alpha(self, target:Self, status:Self) -> f64 {
+        let (sr,sg,sb,sa) = self.as_rgba8();
+        let (tr,tg,tb,ta) = target.as_rgba8();
+        let (str,stg,stb,sta) = status.as_rgba8();
+
+        sr.alpha(tr, str)
+        .max( sg.alpha(tg, stg) )
+        .max( sb.alpha(tb, stb) )
+        .max( sa.alpha(ta, sta) )
+    }
 }
 
 impl Transit for BorderStyle {
@@ -211,18 +253,30 @@ impl Transit for BorderStyle {
             color: self.color.transit(target.color, alpha)
         }
     }
-}
 
-impl <T:Transit> Transit for Option<T> {
-    fn transit(self, target:Self, alpha:f64) -> Self {
-        match (self, target) {
-            (None, None) => None,
-            (None, Some(t)) => Some(t),
-            (Some(s), None) => Some(s),
-            (Some(s), Some(t)) => Some(s.transit(t,alpha)),
-        }
+    fn alpha(self, target:Self, status:Self) -> f64 {
+        self.width.alpha(target.width, status.width)
+        .max( self.radius.alpha(target.radius, status.radius))
+        .max( self.color.alpha(target.color, status.color) )
     }
 }
+
+// impl <T:Transit> Transit for Option<T> {
+//     fn transit(self, target:Self, alpha:f64) -> Self {
+//         match (self, target) {
+//             (None, None) => None,
+//             (None, Some(t)) => Some(t),
+//             (Some(s), None) => Some(s),
+//             (Some(s), Some(t)) => Some(s.transit(t,alpha)),
+//         }
+//     }
+
+//     fn alpha(self, target:Self, status:Self) -> f64 {
+//         self.width.alpha(target.width, status.width)
+//         .max( self.radius.alpha(target.radius, status.radius))
+//         .max( self.color.alpha(target.color, status.color) )
+//     }
+// }
 
 #[derive(Debug,Clone,Copy)]
 pub struct BorderStyle {
@@ -363,8 +417,66 @@ impl Style {
         (layout_updated, paint_updated, has_next_anim)
     }
 
-    pub fn transit(&self, elapsed:i64, start:&Style, end:&Style, styler:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
-todo!()
+    pub fn transit(&self, elapsed:i64, target:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
+        let mut layout_updated = false;
+        let mut paint_updated = false;
+        let mut has_next_anim = false;
+
+        macro_rules! transit_style {
+            ($item:ident) => {
+                match &mut target.$item {
+                    ( Some(target_style), Some(target_anim) ) => {
+                        let transit = target_anim.transit( self.$item, target_style.clone(), elapsed);
+                        out.$item = transit.1.into();
+                        (true, transit.0)
+                    }
+                    ( Some(target_style), None) => {
+                        out.$item = target_style.clone().into();
+                        (true, false)
+                    }
+                    _ => (false, false)
+                }
+            }
+        }
+
+        let result = transit_style!( padding );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( margin );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( font_size );
+        layout_updated |= result.0;
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        // let result = transit_style!( width );
+        // layout_updated |= result.0;
+        // paint_updated |= result.0;
+        // has_next_anim |= result.1;
+
+        // let result = transit_style!( height );
+        // layout_updated |= result.0;
+        // paint_updated |= result.0;
+        // has_next_anim |= result.1;
+
+        let result = transit_style!( text_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( background_color );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        let result = transit_style!( border );
+        paint_updated |= result.0;
+        has_next_anim |= result.1;
+
+        (layout_updated, paint_updated, has_next_anim)
     }
 
     pub fn transit2(&self, elapsed:i64, target:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
@@ -471,24 +583,52 @@ impl Styler {
 		}
     }
 
-    pub fn set_progress_state(&mut self, state:f64) {
-        macro_rules! clear_state {
+    // #[deprecated]
+    // pub fn set_state(&mut self, state:f64) {
+    //     macro_rules! set_anim_state {
+    //         ($item:ident) => {
+    //             if let (_,Some(anim)) = self.$item {
+    //                 anim.elapsed = (anim.anim.duration as f64 * state) as _;
+    //             }
+    //         }
+    //     }
+    //     set_anim_state!(padding);
+    //     set_anim_state!(margin);
+    //     set_anim_state!(font_size);
+    //     set_anim_state!(width);
+    //     set_anim_state!(height);
+    //     set_anim_state!(text_color);
+    //     set_anim_state!(background_color);
+    //     set_anim_state!(border);
+    // }
+
+    pub fn set_state_from_style(&mut self, start:&Style, curr:&Style) {
+        macro_rules! set_anim_state {
             ($item:ident) => {
-                if let (_,Some(anim)) = self.$item {
-                    anim.elapsed = (anim.anim.duration as f64 * state) as _;
+                if let (Some(_self),Some(ref mut anim)) = self.$item {
+                    let alpha = start.$item.alpha( _self, curr.$item );
+                    let alpha = if alpha.is_nan() {
+                        0.
+                    } else if alpha.is_infinite() {
+                        1.
+                    } else {
+                        alpha
+                    };
+                    println!("{} {:?}", stringify!($item), alpha);
+                    //anim.elapsed = (anim.anim.duration as f64 * alpha) as _;
+                    anim.elapsed = 0;
                 }
             }
         }
-        clear_state!(padding);
-        clear_state!(margin);
-        clear_state!(font_size);
-        clear_state!(width);
-        clear_state!(height);
-        clear_state!(text_color);
-        clear_state!(background_color);
-        clear_state!(border);
+        set_anim_state!(padding);
+        set_anim_state!(margin);
+        set_anim_state!(font_size);
+        // set_anim_state!(width);
+        // set_anim_state!(height);
+        set_anim_state!(text_color);
+        set_anim_state!(background_color);
+        set_anim_state!(border);
     }
-
 
     pub fn get_padding(&self) -> Option<Insets> {
         self.padding.0

@@ -6,10 +6,10 @@ use druid::widget::{Flex, TextBox};
 use druid::{AppLauncher, WindowDesc, widget::{Label,Button} };
 use druid::{WidgetExt, Color, Vec2, Insets};
 use druid_xml::qwidget::drawable::*;
-use druid_xml::simple_style::{BorderStyle, Styler, AnimationState, Animation, Direction, TimingFunction};
+use druid_xml::simple_style::{BorderStyle, Styler, AnimationState, Animation, Direction, TimingFunction, PseudoStyle};
 use druid_xml::widget::button::DXButton;
 use druid_xml::widget::label::DXLabel;
-use druid_xml::widget::style_widget::{SimpleStyleWidget, PseudoStyle};
+use druid_xml::widget::style_widget::{SimpleStyleWidget};
 
 use druid_xml::widget::theme;
 

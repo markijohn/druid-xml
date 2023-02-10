@@ -97,88 +97,6 @@ impl<T,W:Widget<T>> SimpleStyleWidget<T,W> {
 
 }
 
-/// return (layout, paint, anim, ResultStyle)
-// fn check_style(e:i64, src:&mut Styler, target:&Styler) -> Option<(bool,bool,bool,Style)> {
-// 	let mut need_anim = false;
-	
-// 	//padding
-// 	let target_padding = target.get_padding();
-// 	let result = src.get_padding_with_anim( e, target_padding );
-// 	let (has_next_anim,padding) = result.into();
-// 	need_anim |= has_next_anim;
-
-// 	//margin. same procedure padding
-// 	let target_margin = target.get_margin();
-// 	let result = src.get_margin_with_anim( e, target_margin );
-// 	let (has_next_anim,margin) = result.into();
-// 	need_anim |= has_next_anim;
-
-// 	//font-size
-// 	let target_font_size = target.get_font_size();
-// 	let result = src.get_font_size_with_anim( e, target_font_size );
-// 	let (has_next_anim,font_size) = result.into();
-// 	need_anim |= has_next_anim;
-
-// 	//width
-// 	let target_width = target.get_width();
-// 	let result = src.get_width_with_anim( e, target_width );
-// 	let (has_next_anim,width) = result.into();
-// 	need_anim |= has_next_anim;
-
-// 	//height
-// 	let target_height = target.get_height();
-// 	let result = src.get_height_with_anim( e, target_height );
-// 	let (has_next_anim,height) = result.into();
-// 	need_anim |= has_next_anim;
-
-// 	//text-color
-// 	let target_text_color = target.get_text_color();
-// 	let result = src.get_text_color_with_anim( e, target_text_color );
-// 	let (has_next_anim,text_color) = result.into();
-// 	need_anim |= has_next_anim;
-
-// 	//background-color
-// 	let target_background_color = target.get_background_color();
-// 	let result = src.get_background_color_with_anim( e, target_background_color );
-// 	let (has_next_anim,background_color) = result.into();
-// 	need_anim |= has_next_anim;
-	
-// 	//border
-// 	let target_border = target.get_border();
-// 	let result = src.get_border_with_anim( e, target_border );
-// 	let (has_next_anim,border) = result.into();
-// 	need_anim |= has_next_anim;
-
-// 	let need_layout = 
-// 	padding.is_some() 
-// 	| margin.is_some()
-// 	| font_size.is_some()
-// 	| width.is_some()
-// 	| height.is_some();
-
-// 	let need_paint = 
-// 	need_layout
-// 	| text_color.is_some()
-// 	| background_color.is_some()
-// 	| border.is_some();
-	
-
-// 	if need_layout | need_paint {
-// 		Some( (need_layout,need_paint,need_anim, Style {
-// 			padding,
-// 			margin,
-// 			font_size,
-// 			width,
-// 			height,
-// 			text_color,
-// 			background_color,
-// 			border,
-// 		} ) )
-// 	} else {
-// 		None
-// 	}
-// }
-
 fn wrapped_padding_env(env:&Env, style_updated:u64, style:&Style) -> Env {
 	let mut wrapped_env = env.clone();
 	wrapped_env.set( theme::STYLE_UPDATED, style_updated );
@@ -218,7 +136,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 			_ => ()
 		};
 		
-		let mut on_trigger = false;
+		let mut on_style_trigger = false;
 		let has_focus = ctx.has_focus() && is_inner;
 		let is_hover = ctx.is_hot()  && is_inner;
 		let is_active = ctx.is_active();
@@ -227,44 +145,53 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 
 		if self.has_focus_style && self.last_focus != has_focus {
 			self.last_focus = has_focus;
-			on_trigger = true;
+			on_style_trigger = true;
 		}
 
 		if self.has_hover_style && self.last_hover != is_hover {
 			self.last_hover = is_hover;
-			on_trigger = true;
+			on_style_trigger = true;
 		}
 
 		if self.has_active_style && self.last_active != is_active {
 			self.last_active = is_active;
-			on_trigger = true;
+			on_style_trigger = true;
 		}
 
 		if self.has_disabled_style && self.last_disabled != is_hover {
 			self.last_disabled = is_disabled;
-			on_trigger = true;
+			on_style_trigger = true;
 		}
 
-		if on_trigger {
+		if on_style_trigger {
 			ctx.request_anim_frame();
-
-			//clear animation state
-			//dont need this
-			// self.normal_style.set_progress_state(0f64);
-			// for style in self.styles.iter_mut() {
-			// 	if let Some(style) = style {
-			// 		style.style.set_progress_state(0f64);
-			// 	}
-			// }
 
 			//set start style to goal style
 			self.start_style = self.end_style.clone();
 			self.base_style = self.curr_style.clone();
 
+			//analysis progress state
+			self.normal_style.set_state_from_style(&self.start_style, &self.base_style);
+			if has_state {
+				for e in self.styles.iter_mut() {
+					if let Some( e) = e.as_mut() {
+						let target = match e.pseudo {
+							Pseudo::Focus => has_focus,
+							Pseudo::Hover => is_hover,
+							Pseudo::Active => is_active,
+							Pseudo::Disabled => is_disabled,
+						};
+						if target {
+							e.style.set_state_from_style(&self.start_style, &self.base_style);
+						}
+					}
+				}
+			}
+
 			//make new target style
-			self.end_style = self.normal_style.composite_styles( self.styles.iter()
-				.filter( |e|
-					if let Some(e) = e{
+			self.end_style = self.normal_style.composite_styles( self.styles.iter_mut()
+				.filter( | e|
+					if let Some( e) = e {
 						match e.pseudo {
 							Pseudo::Focus => has_focus,
 							Pseudo::Hover => is_hover,
@@ -286,13 +213,9 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 		
 		match event {
 			Event::AnimFrame(e) => {
-				let (mut request_layout, mut request_paint, mut request_anim) = (false, false, false);
-				if !has_state {
-					let result = self.base_style.transit(*e as _, &self.start_style, &self.end_style,  &mut self.normal_style, &mut self.curr_style);
-					request_layout |= result.0;
-					request_paint |= result.1;
-					request_anim |= result.2;
-				} else {
+				let (mut request_layout, mut request_paint, mut request_anim) = 
+				self.base_style.transit(*e as _, &mut self.normal_style, &mut self.curr_style);
+				if has_state {
 					for ps in self.styles.as_mut() {
 						if let Some(ps) = ps {
 							let matched = match ps.pseudo {
@@ -306,7 +229,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 								continue
 							}
 	
-							let result = self.base_style.composite_transit( *e as _,&mut ps.style, &mut self.normal_style,&mut self.curr_style );
+							let result = self.base_style.transit(*e as _, &mut ps.style, &mut self.curr_style);
 							request_layout |= result.0;
 							request_paint |= result.1;
 							request_anim |= result.2;
@@ -324,11 +247,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 					ctx.request_anim_frame();
 				}
 			}
-			_ => {
-				if event.is_pointer_event() {
-					ctx.request_anim_frame();
-				}
-			}
+			_ => ()
 		}
 		
 		
