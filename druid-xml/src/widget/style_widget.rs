@@ -170,8 +170,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 			self.start_style = self.end_style.clone();
 			self.base_style = self.curr_style.clone();
 
-			//analysis progress state
-			self.normal_style.set_state_from_style(&self.start_style, &self.base_style);
+			
 			if has_state {
 				for e in self.styles.iter_mut() {
 					if let Some( e) = e.as_mut() {
@@ -182,7 +181,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 							Pseudo::Disabled => is_disabled,
 						};
 						if target {
-							e.style.set_state_from_style(&self.start_style, &self.base_style);
+							e.style.set_state_from_style(&self.start_style, &self.end_style, &self.base_style);
 						}
 					}
 				}
@@ -207,13 +206,18 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 					true
 				})
 			);
+
+			//analysis progress state
+			self.normal_style.set_state_from_style(&self.start_style, &self.end_style, &self.base_style);
+			println!("Start Style {:#?}", self.start_style);
+			println!("End Style {:#?}", self.end_style);
 		}
 		
 		
 		match event {
 			Event::AnimFrame(e) => {
 				let (mut request_layout, mut request_paint, mut request_anim) = 
-				self.base_style.transit(*e as _, &mut self.normal_style, &mut self.curr_style);
+				self.base_style.transit(*e as _, &self.end_style, &mut self.normal_style, None, &mut self.curr_style);
 				if has_state {
 					for ps in self.styles.as_mut() {
 						if let Some(ps) = ps {
@@ -228,13 +232,16 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 								continue
 							}
 	
-							let result = self.base_style.transit(*e as _, &mut ps.style, &mut self.curr_style);
+							let result = self.base_style.transit(*e as _, &self.end_style, &mut ps.style, Some(&mut self.normal_style), &mut self.curr_style);
 							request_layout |= result.0;
 							request_paint |= result.1;
 							request_anim |= result.2;
+							// println!("{:?} layout:{} paint:{} anim:{}", ps.pseudo, request_layout, request_paint, request_anim);
 						}
 					}
+					
 				}
+				
 				
 				if request_layout {
 					ctx.request_layout();
@@ -242,7 +249,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 				if request_paint {
 					ctx.request_paint();
 				}
-				if request_anim {
+				if request_anim || *e == 0 {
 					ctx.request_anim_frame();
 				}
 			}
