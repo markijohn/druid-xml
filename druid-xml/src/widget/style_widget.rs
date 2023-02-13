@@ -8,7 +8,7 @@ use super::theme;
 /// A StyleWidget for `hover` and `animation` effect
 /// This widget changed `Env` and support `Padding` and `Conatainer`
 /// Recommend pseudo class order is `focus` -> `hover` -> `active` but it's not mandatory
-/// Forced order is 'normal(none pseudo)' -> disabled -> {user defined styles..}
+/// Styles declared later take precedence. (like CSS)
 pub struct SimpleStyleWidget<T,W> {
 	normal_style : Styler,
 	styles : [Option<PseudoStyle>;4],
@@ -209,8 +209,8 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 
 			//analysis progress state
 			self.normal_style.set_state_from_style(&self.start_style, &self.end_style, &self.base_style);
-			println!("Start Style {:#?}", self.start_style);
-			println!("End Style {:#?}", self.end_style);
+			// println!("Start Style {:#?}", self.start_style);
+			// println!("End Style {:#?}", self.end_style);
 		}
 		
 		
@@ -232,6 +232,10 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 								continue
 							}
 	
+							//TODO : optimization
+							//There are several optimization points. 
+							//If the transition of the styler has been performed while performing the iteration backwards, 
+							//the rest does not need to be performed. But currently it does all the transition processing while doing forward iteration.
 							let result = self.base_style.transit(*e as _, &self.end_style, &mut ps.style, Some(&mut self.normal_style), &mut self.curr_style);
 							request_layout |= result.0;
 							request_paint |= result.1;
@@ -297,7 +301,8 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 		let size = ctx.size();
 
 		if self.curr_style.border.width > 0. {
-			let rr = RoundedRect::new(ml, mt, size.width, size.height, self.curr_style.border.radius);
+			let inner_grow = self.curr_style.border.width - 1.;
+			let rr = RoundedRect::new(ml+inner_grow, mt+inner_grow, size.width-inner_grow, size.height-inner_grow, self.curr_style.border.radius);
 			ctx.fill(rr, &self.curr_style.background_color);
 			ctx.stroke_styled(rr, &self.curr_style.border.color, self.curr_style.border.width, &druid::piet::StrokeStyle::default());
 		} else {

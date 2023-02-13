@@ -1,14 +1,83 @@
 
 
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::collections::HashMap;
 use quick_xml::events::BytesStart;
 use quick_xml::name::{self, QName};
-use simplecss::{Declaration, DeclarationTokenizer, StyleSheet};
+use simplecss::{Declaration, DeclarationTokenizer, StyleSheet, PseudoClass};
 use std::fmt::Write;
 
+use crate::simple_style::Pseudo;
 use crate::{named_color, AttributesWrapper};
 use crate::{AttributeGetter, Element, Error};
+
+enum PseudoClassTrap<'a> {
+    PseudoClass(simplecss::PseudoClass<'a>),
+    Etc(&'static str)
+}
+
+pub(crate) struct PseudoOrderTrapQueryWrap<'a> {
+    pub pseudo : Cell<Option<PseudoClassTrap<'a>>>,
+    pub origin : ElementQueryWrap<'a>,
+}
+
+impl <'a> PseudoOrderTrapQueryWrap<'a> {
+    pub fn new(origin:ElementQueryWrap<'a>) -> Self {
+        Self { pseudo : Cell::new(None), origin }
+    }
+
+    pub fn get_pseudo(self) -> Option<Pseudo> {
+        match self.pseudo.take() {
+            Some(v) => match v {
+                PseudoClassTrap::PseudoClass(p) => match p {
+                    PseudoClass::FirstChild => panic!("unsupport pseudo class"),
+                    PseudoClass::Link => panic!("unsupport pseudo class"),
+                    PseudoClass::Visited => panic!("unsupport pseudo class"),
+                    PseudoClass::Hover => Some(Pseudo::Hover),
+                    PseudoClass::Active => Some(Pseudo::Active),
+                    PseudoClass::Focus => Some(Pseudo::Focus),
+                    PseudoClass::Lang(_) => panic!("unsupport pseudo class"),
+                },
+                PseudoClassTrap::Etc(_) => todo!(), //for disabled
+            },
+            None => None,
+        }
+    }
+}
+
+
+impl <'a> simplecss::Element for PseudoOrderTrapQueryWrap<'a> {
+    fn parent_element(&self) -> Option<Self> {
+        self.origin.parent_element().map( |origin| {
+            Self { pseudo:self.pseudo, origin }
+        })
+    }
+
+    fn prev_sibling_element(&self) -> Option<Self> {
+        self.origin.prev_sibling_element().map( |origin| {
+            Self { pseudo:self.pseudo, origin }
+        })
+    }
+
+    fn has_local_name(&self, name: &str) -> bool {
+        self.origin.has_local_name(name)
+    }
+
+    fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
+        self.origin.attribute_matches(local_name, operator)
+    }
+
+    fn pseudo_class_matches(&self, _class: simplecss::PseudoClass) -> bool {
+        let cell = self.pseudo.get_mut();
+        if cell.is_none() {
+            cell.replace( PseudoClassTrap::PseudoClass(_class) );
+            true
+        } else {
+            false
+        }
+    }
+}
 
 /// stack[parent .. elem]
 pub(crate) struct ElementQueryWrap<'a> {
@@ -20,7 +89,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
     fn parent_element(&self) -> Option<Self> {
         let len = self.parent_stack.len();
 		if len > 0 {
-			Some( ElementQueryWrap { 
+			Some( ElementQueryWrap {
                 parent_stack:&self.parent_stack[..len-1], 
                 elem:&self.parent_stack[len-1]
             } )
@@ -35,7 +104,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
             let parent = &self.parent_stack[len-1];
             if let Some( (idx,_finded)) = parent.childs.iter().enumerate().find( |(_idx,e)| e.src_pos == self.elem.src_pos ) {
                 if idx > 0 {
-                    return Some( ElementQueryWrap { 
+                    return Some( ElementQueryWrap {
                         parent_stack:self.parent_stack,
                         elem:&parent.childs[idx-1] } )
                 }
@@ -62,7 +131,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
         //TODO : 
 		//https://docs.rs/simplecss/latest/simplecss/enum.PseudoClass.html
 		//https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-classes
-		false
+        false
     }
 }
 
@@ -179,6 +248,36 @@ impl DruidGenerator {
             }
         }
 
+        macro_rules! style_opt {
+            ( $name:literal ) => {
+                style_opt!("", $name, "");
+            };
+            ( $start:literal, $name:literal, $end:literal ) => {
+                if let Some(value) = get_style!($name) {
+                    _src!( 0, "Some(");
+                    _src!( 0, $start);
+                    match $name {
+                        "margin" => CSSAttribute::padding(&mut self.writer, value).unwrap(),
+                        "padding" => CSSAttribute::padding(&mut self.writer, value).unwrap(),
+                        "background-color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
+                        "color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
+                        "font-size" => CSSAttribute::font_size(&mut self.writer, value).unwrap(),
+                        "border" => CSSAttribute::border_color_and_width(&mut self.writer, value).unwrap(),
+                        "text-align" => CSSAttribute::text_align(&mut self.writer, value).unwrap(),
+                        "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
+                        "object-fit" => CSSAttribute::object_fit(&mut self.writer, value).unwrap(),
+                        "width" | "height" => CSSAttribute::size(&mut self.writer, value).unwrap(),
+                        "image-rendering" => CSSAttribute::image_rendering(&mut self.writer, value).unwrap(),
+                        _ => unimplemented!("unknown css attribute : {}", $name)
+                    }
+                    _src!( 0, $end );
+                    _src!( 0, ")" );
+                } else {
+                    _src!( 0, "None" );
+                }
+            }
+        }
+
         macro_rules! attr {
             ($start:literal, $attr:literal, $end:literal) => {
                 attr!(attrs, $start, $attr, $end);
@@ -218,8 +317,7 @@ impl DruidGenerator {
         
         let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
         let input_type = String::from_utf8_lossy( input_type_holder );
-        //TODO : Wrap EnvSetup
-        //TODO : Bind event
+
         if tag == "flex" {
             if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
                 src!("let mut flex = druid::widget::Flex::column();\n");
@@ -285,13 +383,13 @@ impl DruidGenerator {
             } else {
                 &text
             };
-            src!("let mut label = druid::widget::Label::new(\"{label_text}\");\n" );
-            style!("label.set_text_color(", "color", ");\n");
-            style!("label.set_text_size(", "font-size", ");\n");
+            src!("let mut label = druid_xml::widget::DXLabel::new(\"{label_text}\");\n" );
+            // style!("label.set_text_color(", "color", ");\n");
+            // style!("label.set_text_size(", "font-size", ");\n");
             style!("label.set_text_alignment(\"", "text-align", "\");\n");
 
             if tag == "button" {
-                src!("let button = druid::widget::Button::from_label(label);\n");
+                src!("let button = druid_xml::widget::DXButton::from_label(label);\n");
             }
         }
 
@@ -411,20 +509,20 @@ impl DruidGenerator {
             tag_wrap = "painter";
         }
 
-        //WARN : container is none-standard
-        else if tag == "container" {
-            if elem.childs.len() != 1 {
-                return Err(Error::InvalidContainerChildNum(elem.src_pos))
-            }
-            let new_stack = new_parent_stack!();
-            src!("let child = {{\n");
-            self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css, wrappers)?;
-            src!("}};\n");
-
-            src!( "let mut container = druid::widget::Container::new(child);\n");
-            style!("container.set_background(", "background-color", ");\n");
-            style!("container.set_border(", "border", ");\n");
-        }
+        //The Container has been replaced by SimpleStyleWidget.
+        // //WARN : container is none-standard
+        // else if tag == "container" {
+        //     if elem.childs.len() != 1 {
+        //         return Err(Error::InvalidContainerChildNum(elem.src_pos))
+        //     }
+        //     let new_stack = new_parent_stack!();
+        //     src!("let child = {{\n");
+        //     self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css, wrappers)?;
+        //     src!("}};\n");
+        //     src!( "let mut container = druid::widget::Container::new(child);\n");
+        //     style!("container.set_background(", "background-color", ");\n");
+        //     style!("container.set_border(", "border", ");\n");
+        // }
         else {
             tag_wrap = "custom_widget";
             if let Some(elem) = parsed_map.get( tag.as_ref() ) {
@@ -436,6 +534,55 @@ impl DruidGenerator {
                 src!("let custom_widget = {tag}();\n");
                 //return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
             }
+        }
+
+        //build styler
+        //TODO : need optimization for duplicated style(use Rc)
+        {
+            let normal_query = 
+            let focus_query = ElementQueryWrap { pseudo: Some(PseudoClass::Focus), parent_stack, elem };
+            let hover_query = ElementQueryWrap { pseudo: Some(PseudoClass::Hover), parent_stack, elem };
+            let active_query = ElementQueryWrap { pseudo: Some(PseudoClass::Active), parent_stack, elem };
+            let disabled_query = ElementQueryWrap { pseudo: Some(PseudoClass::Disabled), parent_stack, elem }; //simplecss not support Disabled
+
+            specific_style.iter().find( |e| e.name == $name ).map( |e| e.value ).or_else( || {
+                for global_style in css_iter.clone() {
+                    let find = global_style.iter().find( |e| e.name == $name ).map( |e| e.value );
+                    if find.is_some() {
+                        return find
+                    }
+                }
+                None
+            });
+
+            macro_rules! build_styler {
+                ($peudo:ident) => {
+
+                }
+            }
+            src!("let mut normal_style = \n");
+            src!("druid_xml::simple_style::Styler {{\n");
+            src!("     padding : ("); style_opt!("druid::Insets::from(", "padding", ")"); _src!(0, ")\n");
+            src!("     margin : ("); style_opt!("druid::Insets::from(", "margin", ")"); _src!(0, ")\n");
+            src!("     font_size : ("); style_opt!("( ", "font-size", ")"); _src!(0, ")\n");
+            src!("     width : ("); style_opt!("width"); _src!(0, ")\n");
+            src!("     height : ("); style_opt!("height"); _src!(0, ")\n");
+            src!("     text_color : ("); style_opt!("color"); _src!(0, ")\n");
+            src!("     background_color : ("); style_opt!("background-color"); _src!(0, ")\n");
+            src!("     border : ("); style_opt!("border"); _src!(0, ")\n");
+            src!("}};\n");
+
+            css.rules.iter().for_each( |rule| {
+                let pseudo_trap_hack = PseudoOrderTrapQueryWrap::new( ElementQueryWrap { parent_stack, elem } );
+                if rule.selector.matches(&pseudo_trap_hack) {
+                    let pseudo = pseudo_trap_hack.get_pseudo();
+                    //fill
+                }
+            });
+
+            src!("let pseudo_styles = [");
+
+            src!("]");
         }
 
 
@@ -450,9 +597,6 @@ impl DruidGenerator {
                 }
             }
 
-            //wrap `Padding`
-            style!("let {tag_wrap} = druid::WidgetExt::padding({tag_wrap}, " , "padding", ");\n" );
-
             //wrap `SizedBox` with optimize
             if attrs.get(b"width").is_some() && attrs.get(b"height").is_some() {
                 style!("let {tag_wrap} = druid::WidgetExt::fix_size({tag_wrap}, " , "width-height", ");\n" );
@@ -460,7 +604,12 @@ impl DruidGenerator {
                 style!("let {tag_wrap} = druid::WidgetExt::fix_width({tag_wrap}, " , "width", ");\n" );
                 style!("let {tag_wrap} = druid::WidgetExt::fix_height({tag_wrap}, " , "height", ");\n" );    
             }
-            
+
+            //wrap `Padding` for Label,Button
+            src!("let {tag_wrap} = druid::WidgetExt::padding( druid_xml::widget::theme::PADDING );\n");
+            //style!("let {tag_wrap} = druid::WidgetExt::padding({tag_wrap}, " , "padding", ");\n" );
+
+            //custom query wrapper
             for (query, wrapper) in wrappers.iter() {
                 if let Some(selector) = simplecss::Selector::parse(query) {
                     if selector.matches( &elem_query ) {
@@ -472,6 +621,8 @@ impl DruidGenerator {
             }
 
             //finally wrapping styler widget
+            //we must have wrapped above 'Padding' widget
+            src!("SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} )");
         }
 
         src!("{tag_wrap}\n" ); //return element

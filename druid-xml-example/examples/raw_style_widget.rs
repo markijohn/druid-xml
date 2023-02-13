@@ -98,7 +98,7 @@ fn main() {
 			height: (None,None),
 			text_color: (None,None),
 			background_color: (Some(Color::rgb8(0,0,255)),None),
-			border: (Some(BorderStyle { width:3., radius:5., color:Color::rgb8(0,0,255) }),None),
+			border: (Some(BorderStyle { width:10., radius:5., color:Color::rgb8(0,0,255) }), simple_linear_anim),
 		})),
 		Some(PseudoStyle::active( Styler {
 			padding: (None, None ),

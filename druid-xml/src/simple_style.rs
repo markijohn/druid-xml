@@ -182,12 +182,12 @@ impl Transit for f64 {
             let max = target.max(self);
             let min = target.min(self);
             let n_alpha = (status.max(min) - status.min(min)) / (max - min);
-            if n_alpha < 0. {
+            let n_alpha = if n_alpha < 0. {
                 0.
             } else if n_alpha > 1. {
                 1.
             } else {
-                 - n_alpha
+                n_alpha
             };
 
             //the direction
@@ -472,68 +472,6 @@ impl Style {
                     _ => (false, false)
                 }
             };
-            ($item:ident) => {
-                match &mut target.$item {
-                    ( Some(target_style), Some(target_anim) ) => {
-                        let transit = target_anim.transit( self.$item, target_style.clone(), elapsed);
-                        out.$item = transit.1.into();
-                        (true, transit.0)
-                    }
-                    ( Some(target_style), None) => {
-                        out.$item = target_style.clone().into();
-                        (true, false)
-                    }
-                    _ => (false, false)
-                }
-            }
-        }
-
-        let result = transit_style!( padding );
-        layout_updated |= result.0;
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
-
-        let result = transit_style!( margin );
-        layout_updated |= result.0;
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
-
-        let result = transit_style!( font_size );
-        layout_updated |= result.0;
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
-
-        // let result = transit_style!( width );
-        // layout_updated |= result.0;
-        // paint_updated |= result.0;
-        // has_next_anim |= result.1;
-
-        // let result = transit_style!( height );
-        // layout_updated |= result.0;
-        // paint_updated |= result.0;
-        // has_next_anim |= result.1;
-
-        let result = transit_style!( text_color );
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
-
-        let result = transit_style!( background_color );
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
-
-        let result = transit_style!( border );
-        paint_updated |= result.0;
-        has_next_anim |= result.1;
-
-        (layout_updated, paint_updated, has_next_anim)
-    }
-
-    pub fn transit2(&self, elapsed:i64, target:&mut Styler, out:&mut Style) -> (bool,bool,bool) {
-        let mut layout_updated = false;
-        let mut paint_updated = false;
-        let mut has_next_anim = false;
-
-        macro_rules! transit_style {
             ($item:ident) => {
                 match &mut target.$item {
                     ( Some(target_style), Some(target_anim) ) => {
