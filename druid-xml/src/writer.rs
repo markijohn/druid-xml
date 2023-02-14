@@ -537,29 +537,112 @@ impl DruidGenerator {
         }
 
         //build styler
-        //TODO : need optimization for duplicated style(use Rc)
+        //TODO : 
+        // - need optimization for duplicated style(use Rc)
+        // - inherit style
         {
-            let normal_query = 
-            let focus_query = ElementQueryWrap { pseudo: Some(PseudoClass::Focus), parent_stack, elem };
-            let hover_query = ElementQueryWrap { pseudo: Some(PseudoClass::Hover), parent_stack, elem };
-            let active_query = ElementQueryWrap { pseudo: Some(PseudoClass::Active), parent_stack, elem };
-            let disabled_query = ElementQueryWrap { pseudo: Some(PseudoClass::Disabled), parent_stack, elem }; //simplecss not support Disabled
-
-            specific_style.iter().find( |e| e.name == $name ).map( |e| e.value ).or_else( || {
-                for global_style in css_iter.clone() {
-                    let find = global_style.iter().find( |e| e.name == $name ).map( |e| e.value );
-                    if find.is_some() {
-                        return find
-                    }
-                }
-                None
-            });
-
-            macro_rules! build_styler {
-                ($peudo:ident) => {
-
+            fn parse_nano_time(v:&str) -> u64 {
+                let v = v.to_lowercase();
+                if v.ends_with("s") {
+                    u64::from_str_radix( &v[..v.len()-1], 10 ).unwrap_or(0) * 1000_000_000
+                } else if v.ends_with("ms") {
+                    u64::from_str_radix( &v[..v.len()-2], 10 ).unwrap_or(0) * 1000_000
+                } else {
+                    u64::from_str_radix( v.as_str(), 10 ).unwrap() * 1000_000
                 }
             }
+
+            fn transition_option(define:&str, item:&str) {
+                for n in define.split(",") {
+                    let mut duration = 0;
+                    let mut delay = 0;
+                    let mut timing_function = Cow::Borrowed("druid_xml::simple_style::TimingFunction::Linear");
+                    //[sec] [name] => duration,item
+                    //[name] [sec] => duration,item
+                    //[sec] [name] [sec] => duration,item,delay
+                    let wsplited = n.split_whitespace();
+                    let expect_duration = wsplited.next().unwrap();
+                    let expect_property = if expect_duration.chars().next().unwrap().is_numeric() {
+                        //duration
+                        duration = parse_nano_time(expect_duration);
+                        if duration == 0 {
+                            //ignore
+                            continue;
+                        }
+                        if let Some(s) = wsplited.next() {
+                            s
+                        } else {
+                            continue
+                        }
+                    } else {
+                        //pass
+                        expect_duration
+                    };
+
+                    if expect_property != item {
+                        //not target
+                        continue;
+                    }
+
+                    let expect_delay = if let Some(s) = wsplited.next() {
+                        s
+                    } else {
+                        "0"
+                    };
+
+                    let expect_tf = if expect_delay.chars().next().unwrap().is_numeric() {
+                        //delay
+                        delay = parse_nano_time(expect_delay);
+                        if let Some(s) = wsplited.next() {
+                            s
+                        } else {
+                            "druid_xml::simple_style::TimingFunction::Linear"
+                        }
+                    } else {
+                        //timning-funciton
+                        expect_delay
+                    };
+
+                    timing_function = match expect_tf {
+                        "ease" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::Ease"),
+                        "ease-in" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::EaseIn"),
+                        "ease-out" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::EaseOut"),
+                        "ease-in-out" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::EaseInOut"),
+                        "linear" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::Linear"),
+                        "step-start" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::Ease"),
+                        "step-end" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::Ease"),
+                        _ => if expect_tf.starts_with("cubic-bezier(") {
+                            let params = expect_tf["cubic-bezier(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
+                            let mut cb = "druid_xml::simple_style::TimingFunction::CubicBezier{".to_string();
+                            cb.push_str("p1:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
+                            cb.push_str("p2:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
+                            cb.push_str("p3:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
+                            cb.push_str("p4:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
+                            cb.push_str("}");
+                            Cow::Owned(cb)
+                        } else if expect_tf.starts_with("steps(") {
+                            let params = expect_tf["steps(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
+                            let mut cb = "druid_xml::simple_style::TimingFunction::Steps{".to_string();
+                            cb.push_str("n:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
+                            let jumpterm = match params.next().unwrap_or("jump-start") {
+                                "jump-start" => "druid_xml::simple_style::JumpTerm::JumpStart",
+                                "jump-end" => "druid_xml::simple_style::JumpTerm::JumpEnd",
+                                "jump-none" => "druid_xml::simple_style::JumpTerm::JumpNone",
+                                "jump-both" => "druid_xml::simple_style::JumpTerm::JumpBoth",
+                                "start" => "druid_xml::simple_style::JumpTerm::Start",
+                                "end" => "druid_xml::simple_style::JumpTerm::End",
+                                _ => "druid_xml::simple_style::JumpTerm::JumpStart"
+                            };
+                            cb.push_str("jumpterm:"); params.next().unwrap_or("0f64"); cb.push_str("f64, ");
+                            cb.push_str("}");
+                            Cow::Owned(cb)
+                        } else {
+                            Cow::Borrowed("druid_xml::simple_style::TimingFunction::Linear")
+                        }
+                    }
+                }
+            }
+
             src!("let mut normal_style = \n");
             src!("druid_xml::simple_style::Styler {{\n");
             src!("     padding : ("); style_opt!("druid::Insets::from(", "padding", ")"); _src!(0, ")\n");
@@ -572,17 +655,52 @@ impl DruidGenerator {
             src!("     border : ("); style_opt!("border"); _src!(0, ")\n");
             src!("}};\n");
 
-            css.rules.iter().for_each( |rule| {
+            src!("let pseudo_styles = [");
+            let mut pseudo_count = 0;
+            for rule in css.rules.iter() {
                 let pseudo_trap_hack = PseudoOrderTrapQueryWrap::new( ElementQueryWrap { parent_stack, elem } );
+                
                 if rule.selector.matches(&pseudo_trap_hack) {
                     let pseudo = pseudo_trap_hack.get_pseudo();
-                    //fill
+
+                    /// check disabled. simplecss 'disabled' pseudo not support
+                    let selector = rule.selector.to_string();
+                    let check_disabled = simplecss::SelectorTokenizer::from( selector.as_str() );
+                    let is_disabled = check_disabled.find( |e| {
+                        if let Ok(e) = e {
+                            match e {
+                                simplecss::SelectorToken::PseudoClass(p) => *p == "disabled",
+                                _ => false
+                            }
+                        } else {
+                            false
+                        }
+                    }).is_some();
+                    
+                    let pseudo = if is_disabled {
+                        Some(Pseudo::Disabled)
+                    } else {
+                        pseudo
+                    };
+
+                    if let Some(pseudo) = pseudo {
+                        match pseudo {
+                            Pseudo::Focus => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::focus( druid_xml::simple_style::Styler {{\n"),
+                            Pseudo::Hover => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::hover( druid_xml::simple_style::Styler {{\n"),
+                            Pseudo::Active => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::active( druid_xml::simple_style::Styler {{\n"),
+                            Pseudo::Disabled => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::disabled( druid_xml::simple_style::Styler {{\n"),
+                        }
+                        
+                        _src!(1, "}} )");
+                    }
                 }
-            });
+            }
 
-            src!("let pseudo_styles = [");
-
-            src!("]");
+            //fill 'None' 
+            for i in pseudo_count .. 4 {
+                _src!(0, "None,\n");
+            }
+            src!("];\n");
         }
 
 
@@ -622,7 +740,7 @@ impl DruidGenerator {
 
             //finally wrapping styler widget
             //we must have wrapped above 'Padding' widget
-            src!("SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} )");
+            src!("let {tag_wrap} = SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} );");
         }
 
         src!("{tag_wrap}\n" ); //return element
@@ -642,7 +760,6 @@ impl SourceGenerator for DruidGenerator {
         self.impl_write(None,elem_map, &mut vec![], elem, css, wrappers)
     }
 }
-
 
 struct CSSAttribute;
 
