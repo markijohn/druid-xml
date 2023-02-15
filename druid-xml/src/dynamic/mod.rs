@@ -7,7 +7,8 @@ use druid::widget::*;
 use quick_xml::{Reader, events::Event};
 use simplecss::{StyleSheet, Declaration, DeclarationTokenizer};
 
-use crate::writer::ElementQueryWrap;
+use crate::simple_style::{AnimationState, Pseudo, BorderStyle};
+use crate::writer::{ElementQueryWrap, PseudoOrderTrapQueryWrap};
 use crate::{Element, Error, AttributeGetter, DummyLens, AttributesWrapper};
 
 mod color;
@@ -295,31 +296,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
             }
         };
 
-        ( $widget:ident, "object-fit" ) => {
-            if let Some(v) = get_style!("text-align") {
-                match v {
-                    "left" => $widget.set_text_align(druid::TextAlignment::Start),
-                    "right" => $widget.set_text_align(druid::TextAlignment::End),
-                    "center" => $widget.set_text_align(druid::TextAlignment::Center),
-                    "justify" => $widget.set_text_align(druid::TextAlignment::Justify),
-                    _ => return Err( Error::InvalidAttributeValue((0,"text-align")) )
-                }
-            }
-        };
-
         ( $widget:ident, "text-align" ) => {
-            if let Some(v) = get_style!("text-align") {
-                match v {
-                    "left" => $widget.set_text_align(druid::TextAlignment::Start),
-                    "right" => $widget.set_text_align(druid::TextAlignment::End),
-                    "center" => $widget.set_text_align(druid::TextAlignment::Center),
-                    "justify" => $widget.set_text_align(druid::TextAlignment::Justify),
-                    _ => return Err( Error::InvalidAttributeValue((0,"text-align")) )
-                }
-            }
-        };
-
-        ( $widget:ident, "image-rendering" ) => {
             if let Some(v) = get_style!("text-align") {
                 match v {
                     "left" => $widget.set_text_align(druid::TextAlignment::Start),
@@ -429,10 +406,12 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         } else {
             &text
         };
-        let mut label = druid::widget::Label::new( label_text );
-        label = style!(label, "color");
-        label = style!(label, "font-size");
-        label = style!(label, "text-align");
+        //let mut label = druid::widget::Label::new( label_text );
+        // label = style!(label, "color");
+        // label = style!(label, "font-size");
+        // label = style!(label, "text-align");
+
+        let mut label = crate::widget::DXLabel::new( label_text );
 
         if let Some(lbk) = attrs.get(b"line-break") {
             match lbk.as_ref() {
@@ -444,7 +423,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         }
 
         if tag == "button" {
-            Button::from_label(label).boxed()
+            crate::widget::DXButton::from_label(label).boxed()
         } else {
             label.boxed()
         }
@@ -589,14 +568,14 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     }
 
     //WARN : container is none-standard
-    else if tag == "container" {
-        if elem.childs.len() != 1 {
-            return Err(Error::InvalidContainerChildNum(elem.src_pos))
-        }
-        let new_stack = new_parent_stack!();
-        let child = build_widget(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
-        Container::new( child ).boxed()
-    }
+    // else if tag == "container" {
+    //     if elem.childs.len() != 1 {
+    //         return Err(Error::InvalidContainerChildNum(elem.src_pos))
+    //     }
+    //     let new_stack = new_parent_stack!();
+    //     let child = build_widget(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
+    //     Container::new( child ).boxed()
+    // }
 
     else {
         if tag == "demo_custom_widget" {
@@ -611,6 +590,8 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         }
     };
 
+    
+
 
     //all component
     //background, padding, 
@@ -618,8 +599,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         //wrap Lens
         //None
 
-        //wrap `Padding`
-        child = style!(child, "padding").boxed();
+        
 
         //wrap `SizedBox` with optimize
         if get_style!("width").is_some() && get_style!("height").is_some() {
@@ -628,12 +608,265 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
             child = style!(child, "width");
             child = style!(child, "height");
         }
+
+        //wrap `Padding`
+        //child = style!(child, "padding").boxed();
+        child = druid::WidgetExt::padding( child, crate::widget::theme::PADDING ).boxed();
         
         //wrap 'Container' 
-        if tag != "container" {
-            child = style!(child, "background-color");
-            child = style!(child, "border");
+        //deprecated 
+        // if tag != "container" {
+        //     child = style!(child, "background-color");
+        //     child = style!(child, "border");
+        // }
+    }
+
+    //build styler
+    //TODO : 
+    // - need optimization for duplicated style(use Rc)
+    // - inherit style
+    {
+        fn parse_time(v:&str) -> u64 {
+            let v = v.to_lowercase();
+            if v.ends_with("s") {
+                u64::from_str_radix( &v[..v.len()-1], 10 ).unwrap_or(0) * 1000_000_000
+            } else if v.ends_with("ms") {
+                u64::from_str_radix( &v[..v.len()-2], 10 ).unwrap_or(0) * 1000_000
+            } else {
+                u64::from_str_radix( v.as_str(), 10 ).unwrap() * 1000_000
+            }
         }
+
+        fn transition_option(define:Option<&str>, item:&str) -> Option<AnimationState> {
+            let define = if let Some(v) = define {
+                v
+            } else {
+                return None
+            };
+
+            for n in define.split(",") {
+                let mut duration = 0;
+                let mut delay = 0;
+                let mut timing_function = crate::simple_style::TimingFunction::Linear;
+                //[sec] [name] => duration,item
+                //[name] [sec] => duration,item
+                //[sec] [name] [sec] => duration,item,delay
+                let mut wsplited = n.split_whitespace();
+                let expect_duration = wsplited.next().unwrap();
+                let expect_property = if expect_duration.chars().next().unwrap().is_numeric() {
+                    //duration
+                    duration = parse_time(expect_duration);
+                    if duration == 0 {
+                        //ignore
+                        continue;
+                    }
+                    if let Some(s) = wsplited.next() {
+                        s
+                    } else {
+                        continue
+                    }
+                } else {
+                    //pass
+                    expect_duration
+                };
+
+                if expect_property != item {
+                    //not target
+                    continue;
+                }
+
+                let expect_delay = if let Some(s) = wsplited.next() {
+                    s
+                } else {
+                    "0"
+                };
+
+                let expect_tf = if expect_delay.chars().next().unwrap().is_numeric() {
+                    //delay
+                    delay = parse_time(expect_delay);
+                    if let Some(s) = wsplited.next() {
+                        s
+                    } else {
+                        "linear"
+                    }
+                } else {
+                    //timning-funciton
+                    expect_delay
+                };
+
+                timing_function = match expect_tf {
+                    "ease" => crate::simple_style::TimingFunction::Ease,
+                    "ease-in" => crate::simple_style::TimingFunction::EaseIn,
+                    "ease-out" => crate::simple_style::TimingFunction::EaseOut,
+                    "ease-in-out" => crate::simple_style::TimingFunction::EaseInOut,
+                    "linear" => crate::simple_style::TimingFunction::Linear,
+                    "step-start" => crate::simple_style::TimingFunction::Ease,
+                    "step-end" => crate::simple_style::TimingFunction::Ease,
+                    _ => if expect_tf.starts_with("cubic-bezier(") {
+                        let mut params = expect_tf["cubic-bezier(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
+                        crate::simple_style::TimingFunction::CubicBezier{
+                            p1: params.next().unwrap_or("0").parse().unwrap_or(0.),
+                            p2: params.next().unwrap_or("0").parse().unwrap_or(0.),
+                            p3: params.next().unwrap_or("0").parse().unwrap_or(0.),
+                            p4: params.next().unwrap_or("0").parse().unwrap_or(0.)
+                        }
+                    } else if expect_tf.starts_with("steps(") {
+                        let mut params = expect_tf["steps(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
+                        let mut cb = "".to_string();
+                        cb.push_str("n:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
+                        let jumpterm = match params.next().unwrap_or("jump-start") {
+                            "jump-start" => crate::simple_style::JumpTerm::JumpStart,
+                            "jump-end" => crate::simple_style::JumpTerm::JumpEnd,
+                            "jump-none" => crate::simple_style::JumpTerm::JumpNone,
+                            "jump-both" => crate::simple_style::JumpTerm::JumpBoth,
+                            "start" => crate::simple_style::JumpTerm::Start,
+                            "end" => crate::simple_style::JumpTerm::End,
+                            _ => crate::simple_style::JumpTerm::JumpStart
+                        };
+                        crate::simple_style::TimingFunction::Steps{n:params.next().unwrap_or("0").parse().unwrap(), jumpterm}
+                    } else {
+                        crate::simple_style::TimingFunction::Linear
+                    }
+                };
+                return Some(crate::simple_style::AnimationState::from( crate::simple_style::Animation{ delay:delay as _, direction: crate::simple_style::Direction::Normal, duration:duration as _, iteration: 1., name: 1., timing_function, fill_mode: 0. } ));
+            }
+            return None
+        }
+
+        
+        macro_rules! styler_item {
+            ( color, $caller:expr ) => {
+                $caller.map(|background| {
+                    color::to_color( background, Some(Color::rgb8(255,255,255)) )
+                })
+            };
+            ( insets, $caller:expr ) => {
+                $caller.map( |v| {
+                    let mut splits = v.split_whitespace().map( |s| &s[..s.find("px").unwrap_or(s.len())] );                    
+                    let count = splits.clone().count();
+                    if count == 1 {
+                        druid::Insets::from( splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64) )
+                    } else if count == 2 {
+                        druid::Insets::from( (splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64)) )
+                    } else {
+                        druid::Insets::from( (splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64), splits.next().unwrap_or("0").parse::<f64>().unwrap_or(0f64)) )
+                    }
+                })
+            };
+           
+            ( f64, $caller:expr ) => {
+                $caller.map( |value| {
+                    let tv = value.trim();
+                    let font_size = match tv.as_bytes() {
+                        b"xx-small" => 9f64,
+                        b"x-small" => 10f64,
+                        b"small" => 13.333f64,
+                        b"medium" => 16f64,
+                        b"large" => 18f64,
+                        b"x-large" => 24f64,
+                        b"xx-large" => 32f64,
+                        [val @ .. , b'p', b'x'] => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64),
+                        [val @ .. , b'e', b'm'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap_or(13.333f64),
+                        [val @ .. , b'p', b't'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap_or(13.333f64),
+                        [val @ .. , b'%'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap_or(13.333f64),
+                        val @ _ => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
+                    };
+                    font_size
+                } )
+            };
+            ( border, $caller:expr, $caller_rad:expr ) => {
+                $caller.map(|border| {
+                    let v = border.trim();
+                    let mut splited = v.split_whitespace();
+                    let width = splited.next().map( |v| v[..v.find("px").unwrap_or(v.len())].parse::<f64>().unwrap_or(1f64) ).unwrap_or(1f64);
+                    //TODO : support other border style?
+                    let _border_style = splited.next().unwrap_or("solid");
+                    let color = color::to_color(splited.next().unwrap_or("black"), None);
+                    let radius = $caller_rad.unwrap_or("0").parse::<f64>().unwrap_or( 0. );
+                    BorderStyle::new(width, radius, color)
+                })
+            };
+        }
+
+        let normal_transition = get_style!("transition");
+        let normal_style = 
+        crate::simple_style::Styler {
+            padding : ( styler_item!(insets, get_style!("padding")), transition_option(normal_transition, "padding")),
+            margin : ( styler_item!(insets, get_style!("margin")), transition_option(normal_transition, "margin")),
+            font_size : ( styler_item!(f64, get_style!("font-size")), transition_option(normal_transition, "font-size")),
+            width : ( styler_item!(f64, get_style!("width")), transition_option(normal_transition, "width")),
+            height : ( styler_item!(f64, get_style!("height")), transition_option(normal_transition, "height")),
+            text_color : ( styler_item!(color, get_style!("color")), transition_option(normal_transition, "color")),
+            background_color : ( styler_item!(color, get_style!("background-color")), transition_option(normal_transition, "background-color")),
+            border : ( styler_item!(border, get_style!("border"), get_style!("border-radius")), transition_option(normal_transition, "border")),
+        };
+
+        let mut pseudo_styles = [None,None,None,None];
+        let mut temp_styles = vec![];
+        let mut pseudo_count = 0;
+        for rule in css.rules.iter() {
+            let pseudo_trap_hack = PseudoOrderTrapQueryWrap::new( ElementQueryWrap { parent_stack, elem } );
+            
+            if rule.selector.matches(&pseudo_trap_hack) {
+                let pseudo = pseudo_trap_hack.get_pseudo();
+
+                /// check disabled. simplecss 'disabled' pseudo not support
+                let selector = rule.selector.to_string();
+                let mut check_disabled = simplecss::SelectorTokenizer::from( selector.as_str() );
+                let is_disabled = check_disabled.find( |e| {
+                    if let Ok(e) = e {
+                        match e {
+                            simplecss::SelectorToken::PseudoClass(p) => *p == "disabled",
+                            _ => false
+                        }
+                    } else {
+                        false
+                    }
+                }).is_some();
+                
+                let pseudo = if is_disabled {
+                    Some(Pseudo::Disabled)
+                } else {
+                    pseudo
+                };
+
+                macro_rules! get_pseudo_style {
+                    ($name:tt) => {
+                        rule.declarations.iter().find( |e| e.name == $name ).map( |e| e.value )
+                    }
+                }
+
+                if let Some(pseudo) = pseudo {
+                    pseudo_count += 1;
+                    let pseudo_transition = rule.declarations.iter().find( |e| e.name == "transition" ).map( |e| e.value );
+                    let styler = crate::simple_style::Styler {
+                        padding : ( styler_item!(insets, get_pseudo_style!("padding")), transition_option(pseudo_transition, "padding")),
+                        margin : ( styler_item!(insets, get_pseudo_style!("margin")), transition_option(pseudo_transition, "margin")),
+                        font_size : ( styler_item!(f64, get_pseudo_style!("font-size")), transition_option(pseudo_transition, "font-size")),
+                        width : ( styler_item!(f64, get_pseudo_style!("width")), transition_option(pseudo_transition, "width")),
+                        height : ( styler_item!(f64, get_pseudo_style!("height")), transition_option(pseudo_transition, "height")),
+                        text_color : ( styler_item!(color, get_pseudo_style!("color")), transition_option(pseudo_transition, "color")),
+                        background_color : ( styler_item!(color, get_pseudo_style!("background-color")), transition_option(pseudo_transition, "background-color")),
+                        border : ( styler_item!(border, get_pseudo_style!("border"), get_pseudo_style!("border-radius")), transition_option(pseudo_transition, "border")),
+                    };
+                    
+                    let pseudo_styler = match pseudo {
+                        Pseudo::Focus => Some(crate::simple_style::PseudoStyle::focus( styler )),
+                        Pseudo::Hover => Some(crate::simple_style::PseudoStyle::hover( styler )),
+                        Pseudo::Active => Some(crate::simple_style::PseudoStyle::active( styler )),
+                        Pseudo::Disabled => Some(crate::simple_style::PseudoStyle::disabled( styler ))
+                    };
+                    temp_styles.push(pseudo_styler);
+                }
+            }
+        }
+
+        //fill 'None' 
+        for (i,e) in temp_styles.into_iter().enumerate() {
+            pseudo_styles[i] = e;
+        }
+
+        child = crate::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, child ).boxed();
     }
 
     Ok( child )

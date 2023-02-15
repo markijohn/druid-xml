@@ -9,7 +9,6 @@ fn main() {
     druid_xml!(
         r#"
         <style>
-        /* class define */
         label { background-color:rgb(0,0,255); font-size:24px; border:3px solid white; border-radius:5px; padding:10px; margin:0 20 0 0 }
         .anim_margin { transition:2s margin linear }
         .anim_margin:hover { margin:100 20 0 0 }

@@ -364,13 +364,15 @@ impl DruidGenerator {
             } else {
                 &text
             };
-            src!("let mut label = druid_xml::widget::DXLabel::new(\"{label_text}\");\n" );
+            src!("let mut label = druid::widget::Label::new(\"{label_text}\");\n" );
+            //src!("let mut label = druid_xml::widget::DXLabel::new(\"{label_text}\");\n" );
             // style!("label.set_text_color(", "color", ");\n");
             // style!("label.set_text_size(", "font-size", ");\n");
             style!("label.set_text_alignment(\"", "text-align", "\");\n");
 
             if tag == "button" {
-                src!("let button = druid_xml::widget::DXButton::from_label(label);\n");
+                src!("let button = druid::widget::Button::from_label(label);\n");
+                //src!("let button = druid_xml::widget::DXButton::from_label(label);\n");
             }
         }
 
@@ -577,7 +579,7 @@ impl DruidGenerator {
                         if let Some(s) = wsplited.next() {
                             s
                         } else {
-                            "druid_xml::simple_style::TimingFunction::Linear"
+                            "linear"
                         }
                     } else {
                         //timning-funciton
@@ -639,7 +641,7 @@ impl DruidGenerator {
             src!("     border : ("); style_opt!("druid_xml::simple_style::BorderStyle::new(", "border", ")"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"border")).unwrap_or("None".to_string()) );
             src!("}};\n");
 
-            src!("let pseudo_styles = [\n");
+            src!("let pseudo_styles:[Option<druid_xml::simple_style::PseudoStyle>;4] = [\n");
             let mut pseudo_count = 0;
             for rule in css.rules.iter() {
                 let pseudo_trap_hack = PseudoOrderTrapQueryWrap::new( ElementQueryWrap { parent_stack, elem } );
@@ -736,8 +738,9 @@ impl DruidGenerator {
             }
 
             //wrap `Padding` for Label,Button
-            src!("let {tag_wrap} = druid::WidgetExt::padding( {tag_wrap}, druid_xml::widget::theme::PADDING );\n");
             //style!("let {tag_wrap} = druid::WidgetExt::padding({tag_wrap}, " , "padding", ");\n" );
+            //src!("let {tag_wrap} = druid::WidgetExt::padding( {tag_wrap}, druid_xml::widget::theme::PADDING );\n");
+            
 
             //custom query wrapper
             for (query, wrapper) in wrappers.iter() {
@@ -752,7 +755,7 @@ impl DruidGenerator {
 
             //finally wrapping styler widget
             //we must have wrapped above 'Padding' widget
-            src!("let {tag_wrap} = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} );\n");
+            //src!("let {tag_wrap} = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} );\n");
         }
 
         src!("{tag_wrap}\n" ); //return element

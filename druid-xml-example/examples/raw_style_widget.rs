@@ -18,8 +18,8 @@ use druid_xml::widget::theme;
 // padding area include as background paint but margin is not
 
 fn main() {
-	let simple_linear_anim = Some(AnimationState::from( Animation{ delay: 0., direction: Direction::Normal, duration: 1000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } ));
-	let simple_linear_anim_half = Some(AnimationState::from( Animation{ delay: 0., direction: Direction::Normal, duration: 500_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } ));
+	let simple_linear_anim = Some(AnimationState::from( Animation{ delay: 0, direction: Direction::Normal, duration: 1000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } ));
+	let simple_linear_anim_half = Some(AnimationState::from( Animation{ delay: 0, direction: Direction::Normal, duration: 500_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } ));
 
 	let normal_style = Styler {
 		margin: (Some(Insets::new(5., 0., 0., 0.)), simple_linear_anim.clone() ),

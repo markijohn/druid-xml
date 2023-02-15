@@ -117,8 +117,7 @@ pub fn main() {
  <tr>
    <td>background-color</td>
    <td>rgb(0,255,255)<br/>rgba(0,255,255,88)<br/>#96ab05</td>
-   <td>all(exclude button)</td>
-   <td>button not support yet</td>
+   <td>all</td>
  </tr>
  <tr>
    <td>color</td>
@@ -137,6 +136,12 @@ pub fn main() {
    <td>25<br/>25px</td>
    <td>all</td>
    <td>percentage size not yet support(or impossible)</td>
+ </tr>
+ <tr>
+  <td>transition</td>
+   <td>2s background-color linear<br/><br/>font-size<br/>margin<br/>padding<br/>color<br/>border</td>
+   <td>all</td>
+   <td>for hover, focus, active animation</td>
  </tr>
  </tbody>
 </table>
@@ -217,5 +222,5 @@ pub fn main() {
 
 ## TODO
 * Load xml from project path
-* Animation : CSS `transition`
+* Animation : CSS `transition` and `Animation`
 * Drawable widget : like [`Android Drawable`](https://developer.android.com/guide/topics/resources/drawable-resource)

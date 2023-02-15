@@ -1,6 +1,6 @@
 ///Label wrapper for dynamic style(text-size, color)
 
-use druid::{widget::{Label, LabelText, Axis}, Data, Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, LayoutCtx, BoxConstraints, PaintCtx, UpdateCtx, Size};
+use druid::{widget::{Label, LabelText, Axis, LineBreaking}, Data, Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, LayoutCtx, BoxConstraints, PaintCtx, UpdateCtx, Size};
 
 use super::theme;
 
@@ -13,6 +13,10 @@ impl <T:Data> DXLabel<T> {
         Self {
             origin : Label::new(text)
         }
+    }
+
+    pub fn set_line_break_mode(&mut self, mode:LineBreaking ) {
+        self.origin.set_line_break_mode(mode);
     }
 }
 

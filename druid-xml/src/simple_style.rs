@@ -6,7 +6,7 @@ use druid::{Size, Insets, Color, Rect, piet::StrokeStyle};
 
 use crate::{curve::AnimationCurve};
 
-#[derive(Clone,Copy)]
+#[derive(Debug,Clone,Copy)]
 pub enum JumpTerm {
     JumpStart, //Denotes a left-continuous function, so that the first jump happens when the animation begins
     JumpEnd, //Denotes a right-continuous function, so that the last jump happens when the animation ends
@@ -16,7 +16,7 @@ pub enum JumpTerm {
     End //Same as jump-end
 }
 
-#[derive(Clone,Copy)]
+#[derive(Debug,Clone,Copy)]
 pub enum TimingFunction {
     Ease, //Equal to cubic-bezier(0.25, 0.1, 0.25, 1.0), the default value, increases in velocity towards the middle of the animation, slowing back down at the end
     EaseIn, //Equal to cubic-bezier(0.42, 0, 1.0, 1.0), starts off slowly, with the speed of the transition of the animating property increasing until complete
@@ -50,7 +50,7 @@ impl TimingFunction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub enum Direction {
     Normal,
     Reverse,
@@ -58,7 +58,7 @@ pub enum Direction {
     AlternateReverse
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub struct Animation {
     pub delay : i64, //delay for start
     pub direction : Direction, //when animation is end how to start
@@ -69,7 +69,7 @@ pub struct Animation {
     pub fill_mode : f64, //how to fill when animation start/end
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub struct AnimationState {
     elapsed : i64,
     anim : Animation
@@ -211,18 +211,29 @@ impl Transit for u8 {
     }
 
     fn alpha(self, target:Self, status:Self) -> f64 {
-        if target == self {
+        let alpha = if target == self {
+            //avoid zero divide and don't need animation
             1.
         } else {
-            let n_alpha = target.min(self).abs_diff(status) as f64 / target.abs_diff( self ) as f64;
-            if n_alpha < 0. {
+            let max = target.max(self);
+            let min = target.min(self);
+            let n_alpha = (status.max(min) - status.min(min)) / (max - min);
+            let n_alpha = if n_alpha > 1 {
                 1.
-            } else if n_alpha > 1. {
-                0.
             } else {
                 n_alpha as f64
+            };
+
+            //the direction
+            if target < self {
+                1. - n_alpha
+            } else {
+                n_alpha
             }
-        }
+
+        };
+
+        alpha
     }
 }
 
@@ -272,13 +283,17 @@ impl Transit for Color {
         let (tr,tg,tb,ta) = target.as_rgba8();
         let (str,stg,stb,sta) = status.as_rgba8();
 
-        let min_diff = str.abs_diff( tr ).abs_diff( sr )
-        .min( stg.abs_diff( tg ).abs_diff( sg ) )
-        .min( stb.abs_diff( tb ).abs_diff( sb ) )
-        .min( sta.abs_diff( ta ).abs_diff( sa ) );
+        // let min_diff = str.abs_diff( tr ).abs_diff( sr )
+        // .min( stg.abs_diff( tg ).abs_diff( sg ) )
+        // .min( stb.abs_diff( tb ).abs_diff( sb ) )
+        // .min( sta.abs_diff( ta ).abs_diff( sa ) );
 
-        min_diff as f64 / 255.
-        
+        // println!("mindiff col {} {:?} {:?} {:?}", min_diff, self, target, status);
+        // min_diff as f64 / 255.
+        sr.alpha(tr,str)
+        .min( sg.alpha(tg, stg) )
+        .min( sb.alpha(tb, stb) )
+        .min( sa.alpha(ta, sta) )
     }
 }
 
@@ -350,6 +365,7 @@ impl PseudoStyle {
 	}
 }
 
+#[derive(Debug)]
 pub struct Styler {
     pub padding : (Option<Insets>,Option<AnimationState>),
     pub margin : (Option<Insets>,Option<AnimationState>),
