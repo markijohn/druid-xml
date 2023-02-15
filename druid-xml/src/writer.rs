@@ -1,8 +1,9 @@
 
 
 use std::borrow::Cow;
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use quick_xml::events::BytesStart;
 use quick_xml::name::{self, QName};
 use simplecss::{Declaration, DeclarationTokenizer, StyleSheet, PseudoClass};
@@ -12,37 +13,19 @@ use crate::simple_style::Pseudo;
 use crate::{named_color, AttributesWrapper};
 use crate::{AttributeGetter, Element, Error};
 
-enum PseudoClassTrap<'a> {
-    PseudoClass(simplecss::PseudoClass<'a>),
-    Etc(&'static str)
-}
 
 pub(crate) struct PseudoOrderTrapQueryWrap<'a> {
-    pub pseudo : Cell<Option<PseudoClassTrap<'a>>>,
+    pub pseudo : Rc<RefCell<Option<Pseudo>>>,
     pub origin : ElementQueryWrap<'a>,
 }
 
 impl <'a> PseudoOrderTrapQueryWrap<'a> {
     pub fn new(origin:ElementQueryWrap<'a>) -> Self {
-        Self { pseudo : Cell::new(None), origin }
+        Self { pseudo : Rc::new(RefCell::new(None)), origin }
     }
 
     pub fn get_pseudo(self) -> Option<Pseudo> {
-        match self.pseudo.take() {
-            Some(v) => match v {
-                PseudoClassTrap::PseudoClass(p) => match p {
-                    PseudoClass::FirstChild => panic!("unsupport pseudo class"),
-                    PseudoClass::Link => panic!("unsupport pseudo class"),
-                    PseudoClass::Visited => panic!("unsupport pseudo class"),
-                    PseudoClass::Hover => Some(Pseudo::Hover),
-                    PseudoClass::Active => Some(Pseudo::Active),
-                    PseudoClass::Focus => Some(Pseudo::Focus),
-                    PseudoClass::Lang(_) => panic!("unsupport pseudo class"),
-                },
-                PseudoClassTrap::Etc(_) => todo!(), //for disabled
-            },
-            None => None,
-        }
+        self.pseudo.take()
     }
 }
 
@@ -50,13 +33,13 @@ impl <'a> PseudoOrderTrapQueryWrap<'a> {
 impl <'a> simplecss::Element for PseudoOrderTrapQueryWrap<'a> {
     fn parent_element(&self) -> Option<Self> {
         self.origin.parent_element().map( |origin| {
-            Self { pseudo:self.pseudo, origin }
+            Self { pseudo:self.pseudo.clone(), origin }
         })
     }
 
     fn prev_sibling_element(&self) -> Option<Self> {
         self.origin.prev_sibling_element().map( |origin| {
-            Self { pseudo:self.pseudo, origin }
+            Self { pseudo:self.pseudo.clone(), origin }
         })
     }
 
@@ -69,10 +52,14 @@ impl <'a> simplecss::Element for PseudoOrderTrapQueryWrap<'a> {
     }
 
     fn pseudo_class_matches(&self, _class: simplecss::PseudoClass) -> bool {
-        let cell = self.pseudo.get_mut();
+        let mut cell = self.pseudo.borrow_mut();
         if cell.is_none() {
-            cell.replace( PseudoClassTrap::PseudoClass(_class) );
-            true
+            match _class {
+                PseudoClass::Hover => { cell.replace( Pseudo::Hover ); true},
+                PseudoClass::Active => { cell.replace( Pseudo::Active ); true},
+                PseudoClass::Focus => { cell.replace( Pseudo::Focus ); true},
+                _ => false
+            }
         } else {
             false
         }
@@ -220,6 +207,25 @@ impl DruidGenerator {
             } }
         }
 
+        macro_rules! attr_write {
+            ( $name:literal, $value:ident ) => {
+                match $name {
+                    "margin" => CSSAttribute::padding(&mut self.writer, $value).unwrap(),
+                    "padding" => CSSAttribute::padding(&mut self.writer, $value).unwrap(),
+                    "background-color" => CSSAttribute::color(&mut self.writer, $value).unwrap(),
+                    "color" => CSSAttribute::color(&mut self.writer, $value).unwrap(),
+                    "font-size" => CSSAttribute::font_size(&mut self.writer, $value).unwrap(),
+                    "border" => CSSAttribute::border_color_and_width(&mut self.writer, get_style!("border-radius"), $value).unwrap(),
+                    "text-align" => CSSAttribute::text_align(&mut self.writer, $value).unwrap(),
+                    "placeholder" => { write!(self.writer, "{}", $value ).unwrap() },
+                    "object-fit" => CSSAttribute::object_fit(&mut self.writer, $value).unwrap(),
+                    "width" | "height" => CSSAttribute::size(&mut self.writer, $value).unwrap(),
+                    "image-rendering" => CSSAttribute::image_rendering(&mut self.writer, $value).unwrap(),
+                    _ => unimplemented!("unknown css attribute : {}", $name)
+                }
+            }
+        }
+
         macro_rules! style {
             ( $start:literal, $name:literal, $end:literal ) => {
                 if $name == "width-height" {
@@ -230,19 +236,7 @@ impl DruidGenerator {
                     }
                 } else if let Some(value) = get_style!($name) {
                     src!($start);
-                    match $name {
-                        "padding" => CSSAttribute::padding(&mut self.writer, value).unwrap(),
-                        "background-color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
-                        "color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
-                        "font-size" => CSSAttribute::font_size(&mut self.writer, value).unwrap(),
-                        "border" => CSSAttribute::border_color_and_width(&mut self.writer, value).unwrap(),
-                        "text-align" => CSSAttribute::text_align(&mut self.writer, value).unwrap(),
-                        "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
-                        "object-fit" => CSSAttribute::object_fit(&mut self.writer, value).unwrap(),
-                        "width" | "height" => CSSAttribute::size(&mut self.writer, value).unwrap(),
-                        "image-rendering" => CSSAttribute::image_rendering(&mut self.writer, value).unwrap(),
-                        _ => unimplemented!("unknown css attribute : {}", $name)
-                    }
+                    attr_write!($name, value);
                     _src!( 0, $end );
                 }
             }
@@ -256,20 +250,7 @@ impl DruidGenerator {
                 if let Some(value) = get_style!($name) {
                     _src!( 0, "Some(");
                     _src!( 0, $start);
-                    match $name {
-                        "margin" => CSSAttribute::padding(&mut self.writer, value).unwrap(),
-                        "padding" => CSSAttribute::padding(&mut self.writer, value).unwrap(),
-                        "background-color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
-                        "color" => CSSAttribute::color(&mut self.writer, value).unwrap(),
-                        "font-size" => CSSAttribute::font_size(&mut self.writer, value).unwrap(),
-                        "border" => CSSAttribute::border_color_and_width(&mut self.writer, value).unwrap(),
-                        "text-align" => CSSAttribute::text_align(&mut self.writer, value).unwrap(),
-                        "placeholder" => { write!(self.writer, "{}", value ).unwrap() },
-                        "object-fit" => CSSAttribute::object_fit(&mut self.writer, value).unwrap(),
-                        "width" | "height" => CSSAttribute::size(&mut self.writer, value).unwrap(),
-                        "image-rendering" => CSSAttribute::image_rendering(&mut self.writer, value).unwrap(),
-                        _ => unimplemented!("unknown css attribute : {}", $name)
-                    }
+                    attr_write!($name, value);
                     _src!( 0, $end );
                     _src!( 0, ")" );
                 } else {
@@ -541,7 +522,7 @@ impl DruidGenerator {
         // - need optimization for duplicated style(use Rc)
         // - inherit style
         {
-            fn parse_nano_time(v:&str) -> u64 {
+            fn parse_time(v:&str) -> u64 {
                 let v = v.to_lowercase();
                 if v.ends_with("s") {
                     u64::from_str_radix( &v[..v.len()-1], 10 ).unwrap_or(0) * 1000_000_000
@@ -552,7 +533,7 @@ impl DruidGenerator {
                 }
             }
 
-            fn transition_option(define:&str, item:&str) {
+            fn transition_option(define:&str, item:&str) -> String {
                 for n in define.split(",") {
                     let mut duration = 0;
                     let mut delay = 0;
@@ -560,11 +541,11 @@ impl DruidGenerator {
                     //[sec] [name] => duration,item
                     //[name] [sec] => duration,item
                     //[sec] [name] [sec] => duration,item,delay
-                    let wsplited = n.split_whitespace();
+                    let mut wsplited = n.split_whitespace();
                     let expect_duration = wsplited.next().unwrap();
                     let expect_property = if expect_duration.chars().next().unwrap().is_numeric() {
                         //duration
-                        duration = parse_nano_time(expect_duration);
+                        duration = parse_time(expect_duration);
                         if duration == 0 {
                             //ignore
                             continue;
@@ -592,7 +573,7 @@ impl DruidGenerator {
 
                     let expect_tf = if expect_delay.chars().next().unwrap().is_numeric() {
                         //delay
-                        delay = parse_nano_time(expect_delay);
+                        delay = parse_time(expect_delay);
                         if let Some(s) = wsplited.next() {
                             s
                         } else {
@@ -612,7 +593,7 @@ impl DruidGenerator {
                         "step-start" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::Ease"),
                         "step-end" => Cow::Borrowed("druid_xml::simple_style::TimingFunction::Ease"),
                         _ => if expect_tf.starts_with("cubic-bezier(") {
-                            let params = expect_tf["cubic-bezier(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
+                            let mut params = expect_tf["cubic-bezier(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
                             let mut cb = "druid_xml::simple_style::TimingFunction::CubicBezier{".to_string();
                             cb.push_str("p1:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
                             cb.push_str("p2:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
@@ -621,7 +602,7 @@ impl DruidGenerator {
                             cb.push_str("}");
                             Cow::Owned(cb)
                         } else if expect_tf.starts_with("steps(") {
-                            let params = expect_tf["steps(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
+                            let mut params = expect_tf["steps(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
                             let mut cb = "druid_xml::simple_style::TimingFunction::Steps{".to_string();
                             cb.push_str("n:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
                             let jumpterm = match params.next().unwrap_or("jump-start") {
@@ -633,29 +614,32 @@ impl DruidGenerator {
                                 "end" => "druid_xml::simple_style::JumpTerm::End",
                                 _ => "druid_xml::simple_style::JumpTerm::JumpStart"
                             };
-                            cb.push_str("jumpterm:"); params.next().unwrap_or("0f64"); cb.push_str("f64, ");
+                            cb.push_str("jumpterm:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
                             cb.push_str("}");
                             Cow::Owned(cb)
                         } else {
                             Cow::Borrowed("druid_xml::simple_style::TimingFunction::Linear")
                         }
-                    }
+                    };
+                    return format!("Some(druid_xml::simple_style::AnimationState::from( druid_xml::simple_style::Animation{{ delay: {delay}, direction: druid_xml::simple_style::Direction::Normal, duration: {duration}, iteration: 1., name: 1., timing_function: {timing_function}, fill_mode: 0. }} ))");
                 }
+                return "None".to_string()
             }
 
+            let normal_transition = get_style!("transition");
             src!("let mut normal_style = \n");
             src!("druid_xml::simple_style::Styler {{\n");
-            src!("     padding : ("); style_opt!("druid::Insets::from(", "padding", ")"); _src!(0, ")\n");
-            src!("     margin : ("); style_opt!("druid::Insets::from(", "margin", ")"); _src!(0, ")\n");
-            src!("     font_size : ("); style_opt!("( ", "font-size", ")"); _src!(0, ")\n");
-            src!("     width : ("); style_opt!("width"); _src!(0, ")\n");
-            src!("     height : ("); style_opt!("height"); _src!(0, ")\n");
-            src!("     text_color : ("); style_opt!("color"); _src!(0, ")\n");
-            src!("     background_color : ("); style_opt!("background-color"); _src!(0, ")\n");
-            src!("     border : ("); style_opt!("border"); _src!(0, ")\n");
+            src!("     padding : ("); style_opt!("druid::Insets::from(", "padding", ")"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"padding")).unwrap_or("None".to_string()) );
+            src!("     margin : ("); style_opt!("druid::Insets::from(", "margin", ")"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"margin")).unwrap_or("None".to_string()) );
+            src!("     font_size : ("); style_opt!("( ", "font-size", ")"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"font-size")).unwrap_or("None".to_string()) );
+            src!("     width : ("); style_opt!("width"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"width")).unwrap_or("None".to_string()) );
+            src!("     height : ("); style_opt!("height"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"height")).unwrap_or("None".to_string()) );
+            src!("     text_color : ("); style_opt!("color"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"color")).unwrap_or("None".to_string()) );
+            src!("     background_color : ("); style_opt!("background-color");  _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"background-color")).unwrap_or("None".to_string()) );
+            src!("     border : ("); style_opt!("druid_xml::simple_style::BorderStyle::new(", "border", ")"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"border")).unwrap_or("None".to_string()) );
             src!("}};\n");
 
-            src!("let pseudo_styles = [");
+            src!("let pseudo_styles = [\n");
             let mut pseudo_count = 0;
             for rule in css.rules.iter() {
                 let pseudo_trap_hack = PseudoOrderTrapQueryWrap::new( ElementQueryWrap { parent_stack, elem } );
@@ -665,7 +649,7 @@ impl DruidGenerator {
 
                     /// check disabled. simplecss 'disabled' pseudo not support
                     let selector = rule.selector.to_string();
-                    let check_disabled = simplecss::SelectorTokenizer::from( selector.as_str() );
+                    let mut check_disabled = simplecss::SelectorTokenizer::from( selector.as_str() );
                     let is_disabled = check_disabled.find( |e| {
                         if let Ok(e) = e {
                             match e {
@@ -683,22 +667,50 @@ impl DruidGenerator {
                         pseudo
                     };
 
+                    macro_rules! pseudo_style_opt {
+                        ( $name:literal ) => {
+                            pseudo_style_opt!("", $name, "");
+                        };
+                        ( $start:literal, $name:literal, $end:literal ) => {
+                            if let Some(value) = rule.declarations.iter().find( |e| e.name == $name ).map( |e| e.value ) {
+                                _src!( 0, "Some(");
+                                _src!( 0, $start);
+                                attr_write!($name, value);
+                                _src!( 0, $end );
+                                _src!( 0, ")" );
+                            } else {
+                                _src!( 0, "None" );
+                            }
+                        }
+                    }
+
                     if let Some(pseudo) = pseudo {
+                        pseudo_count += 1;
+                        let pseudo_transition = rule.declarations.iter().find( |e| e.name == "transition" ).map( |e| e.value );
                         match pseudo {
-                            Pseudo::Focus => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::focus( druid_xml::simple_style::Styler {{\n"),
-                            Pseudo::Hover => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::hover( druid_xml::simple_style::Styler {{\n"),
-                            Pseudo::Active => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::active( druid_xml::simple_style::Styler {{\n"),
-                            Pseudo::Disabled => _src!(1, "let mut druid_xml::simple_style::PseudoStyle::disabled( druid_xml::simple_style::Styler {{\n"),
+                            Pseudo::Focus => { src!("Some(druid_xml::simple_style::PseudoStyle::focus( druid_xml::simple_style::Styler {{\n"); },
+                            Pseudo::Hover => { src!("Some(druid_xml::simple_style::PseudoStyle::hover( druid_xml::simple_style::Styler {{\n"); },
+                            Pseudo::Active => { src!("Some(druid_xml::simple_style::PseudoStyle::active( druid_xml::simple_style::Styler {{\n"); },
+                            Pseudo::Disabled => { src!("Some(druid_xml::simple_style::PseudoStyle::disabled( druid_xml::simple_style::Styler {{\n"); },
                         }
                         
-                        _src!(1, "}} )");
+                        src!("     padding : ("); pseudo_style_opt!("druid::Insets::from(", "padding", ")"); _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"padding")).unwrap_or("None".to_string()) );
+                        src!("     margin : ("); pseudo_style_opt!("druid::Insets::from(", "margin", ")"); _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"margin")).unwrap_or("None".to_string()) );
+                        src!("     font_size : ("); pseudo_style_opt!("( ", "font-size", ")"); _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"font-size")).unwrap_or("None".to_string()) );
+                        src!("     width : ("); pseudo_style_opt!("width"); _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"width")).unwrap_or("None".to_string()) );
+                        src!("     height : ("); pseudo_style_opt!("height"); _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"height")).unwrap_or("None".to_string()) );
+                        src!("     text_color : ("); pseudo_style_opt!("color"); _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"color")).unwrap_or("None".to_string()) );
+                        src!("     background_color : ("); pseudo_style_opt!("background-color");  _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"background-color")).unwrap_or("None".to_string()) );
+                        src!("     border : ("); pseudo_style_opt!("druid_xml::simple_style::BorderStyle::new(", "border", ")"); _src!(0, ", {}),\n", pseudo_transition.map(|e| transition_option(e,"border")).unwrap_or("None".to_string()) );
+                        
+                        src!("}}) ), ");
                     }
                 }
             }
 
             //fill 'None' 
             for i in pseudo_count .. 4 {
-                _src!(0, "None,\n");
+                src!("None,\n");
             }
             src!("];\n");
         }
@@ -724,7 +736,7 @@ impl DruidGenerator {
             }
 
             //wrap `Padding` for Label,Button
-            src!("let {tag_wrap} = druid::WidgetExt::padding( druid_xml::widget::theme::PADDING );\n");
+            src!("let {tag_wrap} = druid::WidgetExt::padding( {tag_wrap}, druid_xml::widget::theme::PADDING );\n");
             //style!("let {tag_wrap} = druid::WidgetExt::padding({tag_wrap}, " , "padding", ");\n" );
 
             //custom query wrapper
@@ -740,7 +752,7 @@ impl DruidGenerator {
 
             //finally wrapping styler widget
             //we must have wrapped above 'Padding' widget
-            src!("let {tag_wrap} = SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} );");
+            src!("let {tag_wrap} = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} );\n");
         }
 
         src!("{tag_wrap}\n" ); //return element
@@ -844,7 +856,7 @@ impl CSSAttribute {
         Ok(())
     }
 
-    fn border_color_and_width(w:&mut String, v:&str) -> Result<(), Error> {
+    fn border_color_and_width(w:&mut String, radius:Option<&str>, v:&str) -> Result<(), Error> {
         let mut splited = v.split_whitespace();
         let width = splited.next().map( |v| v[..v.find("px").unwrap_or(v.len())].parse::<f64>().unwrap() ).unwrap_or(1f64);
         //TODO : support other border style?
@@ -853,8 +865,10 @@ impl CSSAttribute {
             Err(Error::InvalidAttributeValue((0,"border")))
         } else {
             let color = splited.next().unwrap_or("black");
+            write!(w,"{}f64, ", width).unwrap();
+            Self::size(w, radius.unwrap_or("0")).unwrap();
+            write!(w,",").unwrap();
             Self::color(w,color).unwrap();
-            write!(w,",{}f64", width).unwrap();
             Ok(())
         }
     }

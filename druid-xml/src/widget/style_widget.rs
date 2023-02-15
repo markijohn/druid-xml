@@ -37,12 +37,12 @@ impl<T,W:Widget<T>> SimpleStyleWidget<T,W> {
     pub fn new(normal_style:Styler, styles:[Option<PseudoStyle>;4], inner: W) -> SimpleStyleWidget<T,W> {
 		let padding = normal_style.get_padding().unwrap_or_default();
 		let margin = normal_style.get_margin().unwrap_or_default();
-		let font_size = normal_style.get_font_size().unwrap_or( 14. );
+		let font_size = normal_style.get_font_size().unwrap_or( theme::DEFAULT_FONT_SIZE );
 		let width = normal_style.get_width();
 		let height = normal_style.get_height();
-		let text_color = normal_style.get_text_color().unwrap_or( Color::rgba8(0, 0, 0, 255) );
-		let background_color = normal_style.get_background_color().unwrap_or( Color::rgba8(0, 0, 0, 0) );
-		let border = normal_style.get_border().unwrap_or_default();
+		let text_color = normal_style.get_text_color().unwrap_or( theme::DEFAULT_TEXT_COLOR );
+		let background_color = normal_style.get_background_color().unwrap_or( theme::DEFAULT_BACKGROUND_COLOR );
+		let border = normal_style.get_border().unwrap_or( theme::default_border() );
 		let start_style = Style {
 			padding,
 			margin,
@@ -299,7 +299,6 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
 		let (mt,mr,mb,ml) = (self.curr_style.margin.y0, self.curr_style.margin.x1, self.curr_style.margin.y1, self.curr_style.margin.x0);
 		let size = ctx.size();
-
 		if self.curr_style.border.width > 0. {
 			let inner_grow = self.curr_style.border.width - 1.;
 			let rr = RoundedRect::new(ml+inner_grow, mt+inner_grow, size.width-inner_grow, size.height-inner_grow, self.curr_style.border.radius);

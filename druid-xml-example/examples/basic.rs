@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, WindowDesc};
+use druid::{AppLauncher, WindowDesc, WidgetExt};
 
 #[allow(unused)]
 fn build_main_actual() -> impl druid::Widget<()> {
