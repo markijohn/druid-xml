@@ -335,6 +335,60 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     
     let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
     let input_type = String::from_utf8_lossy( input_type_holder );
+
+    let normal_transition = get_style!("transition");
+    let has_norm_style = 
+            get_style!("padding").is_some() 
+            | get_style!("margin").is_some() 
+            | get_style!("font-size").is_some() 
+            | get_style!("width").is_some() 
+            | get_style!("height").is_some() 
+            | get_style!("color").is_some() 
+            | get_style!("background-color").is_some() 
+            | get_style!("border").is_some()
+            | normal_transition.is_some();
+    let mut has_pseudo_style = false;
+    for rule in css.rules.iter() {
+        let pseudo_trap_hack = PseudoOrderTrapQueryWrap::new( ElementQueryWrap { parent_stack, elem } );           
+        if rule.selector.matches(&pseudo_trap_hack) {
+            let pseudo = pseudo_trap_hack.get_pseudo();
+
+            /// check disabled. simplecss 'disabled' pseudo not support
+            let selector = rule.selector.to_string();
+            let mut check_disabled = simplecss::SelectorTokenizer::from( selector.as_str() );
+            let is_disabled = check_disabled.find( |e| {
+                if let Ok(e) = e {
+                    match e {
+                        simplecss::SelectorToken::PseudoClass(p) => *p == "disabled",
+                        _ => false
+                    }
+                } else {
+                    false
+                }
+            }).is_some();
+            
+            let pseudo = if is_disabled {
+                Some(Pseudo::Disabled)
+            } else {
+                pseudo
+            };
+
+            if pseudo.is_some() {
+                has_pseudo_style = rule.declarations.iter().find( |e| e.name == "padding" ).is_some()
+                | rule.declarations.iter().find( |e| e.name == "margin" ).is_some()
+                | rule.declarations.iter().find( |e| e.name == "font-size" ).is_some()
+                | rule.declarations.iter().find( |e| e.name == "width" ).is_some()
+                | rule.declarations.iter().find( |e| e.name == "height" ).is_some()
+                | rule.declarations.iter().find( |e| e.name == "color" ).is_some()
+                | rule.declarations.iter().find( |e| e.name == "background-color" ).is_some()
+                | rule.declarations.iter().find( |e| e.name == "border" ).is_some();
+                if has_pseudo_style {
+                    break
+                }
+            }
+        }
+    }
+
     //TODO : Wrap EnvSetup
     //TODO : Bind event
     let mut child:Box<dyn Widget<()>> = 
@@ -411,21 +465,36 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         // label = style!(label, "font-size");
         // label = style!(label, "text-align");
 
-        let mut label = crate::widget::DXLabel::new( label_text );
-
-        if let Some(lbk) = attrs.get(b"line-break") {
-            match lbk.as_ref() {
-                b"wordwrap" => label.set_line_break_mode( LineBreaking::WordWrap ),
-                b"clip" => label.set_line_break_mode( LineBreaking::Clip ),
-                b"overflow" => label.set_line_break_mode( LineBreaking::Overflow ),
-                _ => ()
+        if has_norm_style || has_pseudo_style {
+            let mut label = crate::widget::DXLabel::new( label_text );
+            if let Some(lbk) = attrs.get(b"line-break") {
+                match lbk.as_ref() {
+                    b"wordwrap" => label.set_line_break_mode( LineBreaking::WordWrap ),
+                    b"clip" => label.set_line_break_mode( LineBreaking::Clip ),
+                    b"overflow" => label.set_line_break_mode( LineBreaking::Overflow ),
+                    _ => ()
+                }
             }
-        }
-
-        if tag == "button" {
-            crate::widget::DXButton::from_label(label).boxed()
+            if tag == "button" {
+                crate::widget::DXButton::from_label(label).boxed()
+            } else {
+                label.boxed()
+            }
         } else {
-            label.boxed()
+            let mut label = druid::widget::Label::new( label_text );
+            if let Some(lbk) = attrs.get(b"line-break") {
+                match lbk.as_ref() {
+                    b"wordwrap" => label.set_line_break_mode( LineBreaking::WordWrap ),
+                    b"clip" => label.set_line_break_mode( LineBreaking::Clip ),
+                    b"overflow" => label.set_line_break_mode( LineBreaking::Overflow ),
+                    _ => ()
+                }
+            }
+            if tag == "button" {
+                druid::widget::Button::from_label(label).boxed()
+            } else {
+                label.boxed()
+            }
         }
     }
 
@@ -610,8 +679,11 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         }
 
         //wrap `Padding`
-        //child = style!(child, "padding").boxed();
-        child = druid::WidgetExt::padding( child, crate::widget::theme::PADDING ).boxed();
+        if has_norm_style || has_pseudo_style {
+            child = druid::WidgetExt::padding( child, crate::widget::theme::PADDING ).boxed();
+        } else {
+            child = style!(child, "padding").boxed();
+        }
         
         //wrap 'Container' 
         //deprecated 
@@ -625,7 +697,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     //TODO : 
     // - need optimization for duplicated style(use Rc)
     // - inherit style
-    {
+    if has_norm_style || has_pseudo_style {
         fn parse_time(v:&str) -> u64 {
             let v = v.to_lowercase();
             if v.ends_with("s") {

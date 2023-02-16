@@ -299,6 +299,59 @@ impl DruidGenerator {
         let input_type_holder = &attrs.get(b"type").unwrap_or(Cow::Borrowed(b""));
         let input_type = String::from_utf8_lossy( input_type_holder );
 
+        let normal_transition = get_style!("transition");
+        let has_norm_style = 
+                get_style!("padding").is_some() 
+                | get_style!("margin").is_some() 
+                | get_style!("font-size").is_some() 
+                | get_style!("width").is_some() 
+                | get_style!("height").is_some() 
+                | get_style!("color").is_some() 
+                | get_style!("background-color").is_some() 
+                | get_style!("border").is_some()
+                | normal_transition.is_some();
+        let mut has_pseudo_style = false;
+        for rule in css.rules.iter() {
+            let pseudo_trap_hack = PseudoOrderTrapQueryWrap::new( ElementQueryWrap { parent_stack, elem } );           
+            if rule.selector.matches(&pseudo_trap_hack) {
+                let pseudo = pseudo_trap_hack.get_pseudo();
+
+                /// check disabled. simplecss 'disabled' pseudo not support
+                let selector = rule.selector.to_string();
+                let mut check_disabled = simplecss::SelectorTokenizer::from( selector.as_str() );
+                let is_disabled = check_disabled.find( |e| {
+                    if let Ok(e) = e {
+                        match e {
+                            simplecss::SelectorToken::PseudoClass(p) => *p == "disabled",
+                            _ => false
+                        }
+                    } else {
+                        false
+                    }
+                }).is_some();
+                
+                let pseudo = if is_disabled {
+                    Some(Pseudo::Disabled)
+                } else {
+                    pseudo
+                };
+
+                if pseudo.is_some() {
+                    has_pseudo_style = rule.declarations.iter().find( |e| e.name == "padding" ).is_some()
+                    | rule.declarations.iter().find( |e| e.name == "margin" ).is_some()
+                    | rule.declarations.iter().find( |e| e.name == "font-size" ).is_some()
+                    | rule.declarations.iter().find( |e| e.name == "width" ).is_some()
+                    | rule.declarations.iter().find( |e| e.name == "height" ).is_some()
+                    | rule.declarations.iter().find( |e| e.name == "color" ).is_some()
+                    | rule.declarations.iter().find( |e| e.name == "background-color" ).is_some()
+                    | rule.declarations.iter().find( |e| e.name == "border" ).is_some();
+                    if has_pseudo_style {
+                        break
+                    }
+                }
+            }
+        }
+
         if tag == "flex" {
             if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
                 src!("let mut flex = druid::widget::Flex::column();\n");
@@ -364,15 +417,22 @@ impl DruidGenerator {
             } else {
                 &text
             };
-            src!("let mut label = druid::widget::Label::new(\"{label_text}\");\n" );
-            //src!("let mut label = druid_xml::widget::DXLabel::new(\"{label_text}\");\n" );
-            // style!("label.set_text_color(", "color", ");\n");
-            // style!("label.set_text_size(", "font-size", ");\n");
-            style!("label.set_text_alignment(\"", "text-align", "\");\n");
+            
+            if has_norm_style || has_pseudo_style {
+                src!("let mut label = druid_xml::widget::DXLabel::new(\"{label_text}\");\n" );
+            } else {
+                // style!("label.set_text_color(", "color", ");\n");
+                // style!("label.set_text_size(", "font-size", ");\n");
+                src!("let mut label = druid::widget::Label::new(\"{label_text}\");\n" );
+                style!("label.set_text_alignment(\"", "text-align", "\");\n");
+            }
 
             if tag == "button" {
-                src!("let button = druid::widget::Button::from_label(label);\n");
-                //src!("let button = druid_xml::widget::DXButton::from_label(label);\n");
+                if has_norm_style || has_pseudo_style {
+                    src!("let button = druid_xml::widget::DXButton::from_label(label);\n");
+                } else {
+                    src!("let button = druid::widget::Button::from_label(label);\n");
+                }
             }
         }
 
@@ -451,7 +511,7 @@ impl DruidGenerator {
             let new_stack = new_parent_stack!();
             src!("let one = {{\n");
             self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[0], css, wrappers)?;
-            src!("}};");
+            src!("}};\n");
 
             src!("let two = {{\n");
             self.impl_write(parameter, parsed_map, &new_stack, &elem.childs[1], css, wrappers)?;
@@ -523,7 +583,8 @@ impl DruidGenerator {
         //TODO : 
         // - need optimization for duplicated style(use Rc)
         // - inherit style
-        {
+        
+        if has_norm_style || has_pseudo_style {
             fn parse_time(v:&str) -> u64 {
                 let v = v.to_lowercase();
                 if v.ends_with("s") {
@@ -628,7 +689,6 @@ impl DruidGenerator {
                 return "None".to_string()
             }
 
-            let normal_transition = get_style!("transition");
             src!("let mut normal_style = \n");
             src!("druid_xml::simple_style::Styler {{\n");
             src!("     padding : ("); style_opt!("druid::Insets::from(", "padding", ")"); _src!(0, ", {}),\n", normal_transition.map(|e| transition_option(e,"padding")).unwrap_or("None".to_string()) );
@@ -738,9 +798,11 @@ impl DruidGenerator {
             }
 
             //wrap `Padding` for Label,Button
-            //style!("let {tag_wrap} = druid::WidgetExt::padding({tag_wrap}, " , "padding", ");\n" );
-            //src!("let {tag_wrap} = druid::WidgetExt::padding( {tag_wrap}, druid_xml::widget::theme::PADDING );\n");
-            
+            if has_norm_style || has_pseudo_style {
+                src!("let {tag_wrap} = druid::WidgetExt::padding( {tag_wrap}, druid_xml::widget::theme::PADDING );\n");
+            } else {
+                //style!("let {tag_wrap} = druid::WidgetExt::padding({tag_wrap}, " , "padding", ");\n" );
+            }
 
             //custom query wrapper
             for (query, wrapper) in wrappers.iter() {
@@ -755,7 +817,10 @@ impl DruidGenerator {
 
             //finally wrapping styler widget
             //we must have wrapped above 'Padding' widget
-            //src!("let {tag_wrap} = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} );\n");
+            if has_norm_style || has_pseudo_style {
+                src!("let {tag_wrap} = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, {tag_wrap} );\n");
+                src!("let {tag_wrap} = druid::WidgetExt::boxed({tag_wrap});\n");
+            }
         }
 
         src!("{tag_wrap}\n" ); //return element

@@ -4,19 +4,14 @@ extern crate druid_xml_macro;
 use druid::{AppLauncher, WindowDesc, Data, Lens};
 
 pub fn main() {
-    #[derive(Clone, Lens, Data)]
-    struct LoginInfo {
-        id : String,
-        pwd : String,
-        remember : bool
-    }
-
     druid_xml!(
         r##"
 <style>
 [fn=tabmenu] label {font-size:12px; padding:5; color:rgb(154, 160, 166)}
-.tab_selected { background-color:black }
+[fn=tabmenu] label:hover {background-color:black}
+[fn=tabmenu] label:active {background-color:gray; color:white}
 [fn=console] .status { color:rgb(154, 160, 166) }
+console_sep:hover { background-color:darkgray }
 .console_msg label { font-size:13px }
 [fn=console_info] .info { color:white }
 [fn=console_error] .error { color:red }
