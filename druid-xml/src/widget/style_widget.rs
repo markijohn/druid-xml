@@ -217,7 +217,8 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 		match event {
 			Event::AnimFrame(e) => {
 				let (mut request_layout, mut request_paint, mut request_anim) = 
-				self.base_style.transit(*e as _, &self.end_style, &mut self.normal_style, None, &mut self.curr_style);
+				//self.base_style.transit(*e as _, &self.end_style, &mut self.normal_style, None, &mut self.curr_style);
+				self.start_style.transit(*e as _, &self.end_style, &mut self.normal_style, None, &mut self.curr_style);
 				if has_state {
 					for ps in self.styles.as_mut() {
 						if let Some(ps) = ps {
@@ -236,7 +237,8 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 							//There are several optimization points. 
 							//If the transition of the styler has been performed while performing the iteration backwards, 
 							//the rest does not need to be performed. But currently it does all the transition processing while doing forward iteration.
-							let result = self.base_style.transit(*e as _, &self.end_style, &mut ps.style, Some(&mut self.normal_style), &mut self.curr_style);
+							//let result = self.base_style.transit(*e as _, &self.end_style, &mut ps.style, Some(&mut self.normal_style), &mut self.curr_style);
+							let result = self.start_style.transit(*e as _, &self.end_style, &mut ps.style, Some(&mut self.normal_style), &mut self.curr_style);
 							request_layout |= result.0;
 							request_paint |= result.1;
 							request_anim |= result.2;

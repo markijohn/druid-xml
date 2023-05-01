@@ -107,8 +107,9 @@ impl AnimationState {
             true
         };
 
-        let alpha = self.anim.timing_function.translate( self.elapsed as f64 / self.anim.duration as f64 );
-        //println!("alpha {} {} {}", self.elapsed, self.anim.duration, alpha);
+        //let alpha = self.anim.timing_function.translate( self.elapsed as f64 / self.anim.duration as f64 );
+        let alpha = self.elapsed as f64 / self.anim.duration as f64;
+        // println!("alpha {} {} {} {}", self.elapsed, self.anim.duration, interval, alpha);
 
         (has_more, src.transit(target, alpha))
     }
@@ -162,84 +163,127 @@ pub trait Transit {
     fn alpha(self, target:Self, status:Self) -> f64;
 }
 
+// impl Transit for f64 {
+//     fn transit(self, target:Self, alpha:f64) -> Self {
+//         let diff = target - self;
+//         self + diff * alpha
+//     }
+//     fn alpha(self, target:Self, status:Self) -> Self {
+//         let alpha = if target == self {
+//             //avoid zero divide and don't need animation
+//             1.
+//         } else {
+//             let max = target.max(self);
+//             let min = target.min(self);
+//             let n_alpha = (status.max(min) - status.min(min)) / (max - min);
+//             let n_alpha = if n_alpha < 0. {
+//                 0.
+//             } else if n_alpha > 1. {
+//                 1.
+//             } else {
+//                 n_alpha
+//             };
+//             //the direction
+//             if target < self {
+//                 1. - n_alpha
+//             } else {
+//                 n_alpha
+//             }
+//         };
+//         //alpha
+//         alpha.min(1.0).max(0.0)
+//     }
+// }
+
 impl Transit for f64 {
-    fn transit(self, target:Self, alpha:f64) -> Self {
+    fn transit(self, target:Self, alpha:f64) -> Self {     
         let diff = target - self;
         self + diff * alpha
     }
-
     fn alpha(self, target:Self, status:Self) -> Self {
-        //let alpha = (status.max(self).min(target) - self) / (target - self);
-
-        // let total = target.max(self) - target.min(self);
-        // let stat = target.max(status) - target.min(status);
-        // let alpha = 1. - total.min( stat ) / total;
-
         let alpha = if target == self {
             //avoid zero divide and don't need animation
             1.
         } else {
-            let max = target.max(self);
-            let min = target.min(self);
-            let n_alpha = (status.max(min) - status.min(min)) / (max - min);
-            let n_alpha = if n_alpha < 0. {
-                0.
-            } else if n_alpha > 1. {
-                1.
-            } else {
-                n_alpha
-            };
-
-            //the direction
-            if target < self {
-                1. - n_alpha
-            } else {
-                n_alpha
-            }
-
+            ((status - self) / (target - self)).max(0.0).min(1.0)
         };
-
         alpha
-
     }
 }
+
+// impl Transit for f64 {
+//     fn transit(self, target: Self, alpha: f64) -> Self {
+//         let diff = target - self;
+//         self + diff * alpha
+//     }
+
+//     fn alpha(self, target: Self, status: Self) -> Self {
+//         if target == self {
+//             // If the target and the source are equal,
+//             // there is no need for animation.
+//             1.0
+//         } else {
+//             let (min, max) = if self < target {
+//                 (self, target)
+//             } else {
+//                 (target, self)
+//             };
+
+//             let diff = max - min;
+//             let clamped_status = status.max(min).min(max);
+//             let n_alpha = (clamped_status - min) / diff;
+//             //n_alpha.max(0.0).min(1.0)
+//             n_alpha.max(1.0).min(0.0)
+//         }
+//     }
+// }
+
 
 impl Transit for u8 {
-    fn transit(self, target:Self, alpha:f64) -> Self {
-        let diff = target - self;
-        (self as f64 + diff as f64 * alpha) as _
+    fn transit(self, target: Self, alpha: f64) -> Self {
+        let diff = (target as i16 - self as i16) as f64;
+        let value = (self as f64 + diff * alpha).round();
+        value as _
     }
 
-    fn alpha(self, target:Self, status:Self) -> f64 {
-        let alpha = if target == self {
-            //avoid zero divide and don't need animation
-            1.
+    fn alpha(self, target: Self, status: Self) -> f64 {
+        let max = target.max(self);
+        let min = target.min(self);
+        let n_alpha = (status.max(min) - status.min(min)) as f64 / (max - min) as f64;
+        let n_alpha = n_alpha.max(0.0).min(1.0);
+        if target < self {
+            1. - n_alpha
         } else {
-            let max = target.max(self);
-            let min = target.min(self);
-            let n_alpha = (status.max(min) - status.min(min)) / (max - min);
-            let n_alpha = if n_alpha > 1 {
-                1.
-            } else {
-                n_alpha as f64
-            };
-
-            //the direction
-            if target < self {
-                1. - n_alpha
-            } else {
-                n_alpha
-            }
-
-        };
-
-        alpha
+            n_alpha
+        }
     }
 }
 
+// impl Transit for Insets {
+//     fn transit(self, target:Self, alpha:f64) -> Self {
+//         let diff_x0 = target.x0 - self.x0;
+//         let diff_y0 = target.y0 - self.y0;
+//         let diff_x1 = target.x1 - self.x1;
+//         let diff_y1 = target.y1 - self.y1;
+//         // println!("alpha  {}",alpha);
+//         // println!("diff  {} {} {} {}",diff_x0, diff_y0, diff_x1, diff_y1);
+//         Self { 
+//             x0: self.x0 + diff_x0 * alpha, 
+//             y0: self.y0 + diff_y0 * alpha, 
+//             x1: self.x1 + diff_x1 * alpha, 
+//             y1: self.y1 + diff_y1 * alpha 
+//         }
+//     }
+//     fn alpha(self, target:Self, status:Self) -> f64 {
+//         self.x0.alpha(target.x0, status.x0)
+//         .min( self.y0.alpha(target.y0, status.y0) )
+//         .min( self.x1.alpha(target.x1, status.x1) )
+//         .min( self.y1.alpha(target.y1, status.y1) )
+//     }
+// }
 
 impl Transit for Insets {
-    fn transit(self, target:Self, alpha:f64) -> Self {
+    fn transit(self, target: Self, alpha: f64) -> Self {
         let diff_x0 = target.x0 - self.x0;
         let diff_y0 = target.y0 - self.y0;
         let diff_x1 = target.x1 - self.x1;
@@ -254,11 +298,29 @@ impl Transit for Insets {
         }
     }
 
-    fn alpha(self, target:Self, status:Self) -> f64 {
-        self.x0.alpha(target.x0, status.x0)
-        .min( self.y0.alpha(target.y0, status.y0) )
-        .min( self.x1.alpha(target.x1, status.x1) )
-        .min( self.y1.alpha(target.y1, status.y1) )
+    // fn transit(self, target: Self, alpha: f64) -> Self {
+    //     let x0 = self.x0.transit(target.x0, alpha);
+    //     let y0 = self.y0.transit(target.y0, alpha);
+    //     let x1 = self.x1.transit(target.x1, alpha);
+    //     let y1 = self.y1.transit(target.y1, alpha);
+    //     Insets { x0, y0, x1, y1 }
+    // }
+
+    fn alpha(self, target: Self, status: Self) -> f64 {
+        // Calculate alpha values for each edge
+        let alpha_x0 = self.x0.alpha(target.x0, status.x0);
+        let alpha_y0 = self.y0.alpha(target.y0, status.y0);
+        let alpha_x1 = self.x1.alpha(target.x1, status.x1);
+        let alpha_y1 = self.y1.alpha(target.y1, status.y1);
+
+        // Use the minimum alpha value to ensure that all edges are
+        // interpolated at the same pace
+        let alpha = alpha_x0.min(alpha_y0).min(alpha_x1).min(alpha_y1);
+        
+        // Clamp alpha to [0, 1] range
+        let a = alpha.max(0.0).min(1.0);
+        println!("{a}");
+        a
     }
 }
 
@@ -290,10 +352,17 @@ impl Transit for Color {
 
         // println!("mindiff col {} {:?} {:?} {:?}", min_diff, self, target, status);
         // min_diff as f64 / 255.
-        sr.alpha(tr,str)
-        .min( sg.alpha(tg, stg) )
-        .min( sb.alpha(tb, stb) )
-        .min( sa.alpha(ta, sta) )
+
+        // sr.alpha(tr,str)
+        // .min( sg.alpha(tg, stg) )
+        // .min( sb.alpha(tb, stb) )
+        // .min( sa.alpha(ta, sta) )
+        let max_alpha = sr.alpha(tr, str)
+        .max(sg.alpha(tg, stg))
+        .max(sb.alpha(tb, stb))
+        .max(sa.alpha(ta, sta));
+        
+        max_alpha
     }
 }
 
@@ -465,7 +534,7 @@ impl Style {
                     ( _, Some(target_anim) ) => {
                         let transit = target_anim.transit( self.$item, target_style.$item.clone(), elapsed);
                         out.$item = transit.1.into();
-                        // println!("myanim {} {}", stringify!($item), transit.0);
+                        // println!("myanim {} my:{:?} target:{:?} transited:{:?}", stringify!($item), self.$item, target_style.$item, transit);
                         (true, transit.0)
                     }
                     ( _, None) => {
@@ -473,7 +542,7 @@ impl Style {
                             if let (_,Some(target_anim)) = &mut default_styler.$item {
                                 let transit = target_anim.transit( self.$item, target_style.$item.clone(), elapsed);
                                 out.$item = transit.1.into();
-                                // println!("alter anim {} {}", stringify!($item), transit.0);
+                                // println!("alter anim {} {:?}", stringify!($item), transit);
                                 (true, transit.0)
                             } else {
                                 // println!("what");
@@ -515,6 +584,7 @@ impl Style {
         has_next_anim |= result.1;
 
         let result = transit_style!( font_size );
+        // println!("{elapsed} {} {} {:?}", out.font_size, self.font_size, target.font_size);
         layout_updated |= result.0;
         paint_updated |= result.0;
         has_next_anim |= result.1;
@@ -590,17 +660,11 @@ impl Styler {
         macro_rules! set_anim_state {
             ($item:ident) => {
                 if let (_,Some(ref mut anim)) = self.$item {
-                    let alpha = start.$item.alpha( end.$item, curr.$item );
-                    //println!("{} state alpha {:?} {:?} {:?} => {}", stringify!($item), start.$item, end.$item, curr.$item, alpha);
-                    let alpha = if alpha.is_nan() {
-                        0.
-                    } else if alpha.is_infinite() {
-                        1.
-                    } else {
-                        alpha
-                    };
                     
+                    let alpha = start.$item.alpha( end.$item, curr.$item );
                     anim.elapsed = (anim.anim.duration as f64 * alpha) as i64;
+                    // println!("{} {:?}", stringify!($item), start.$item.transit(end.$item, alpha) );
+                    // println!("{} start:{:?} end:{:?} status:{:?} => {} {}", stringify!($item), start.$item, end.$item, curr.$item, alpha, anim.elapsed);
                 }
             }
         }
