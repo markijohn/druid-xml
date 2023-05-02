@@ -548,7 +548,7 @@ impl Selector {
     }
 
     fn matches_impl<E: Element>(&self, idx: usize, element: &E) -> bool {
-        let ref component = self.components[idx];
+        let component = &self.components[idx];
 
         if !match_selector(&component.selector, element) {
             return false;
@@ -602,7 +602,7 @@ fn match_selector<E: Element>(selector: &SimpleSelector, element: &E) -> bool {
     for sub in &selector.subselectors {
         match sub {
             SubSelector::Attribute(name, operator) => {
-                if !element.attribute_matches(name, &operator) {
+                if !element.attribute_matches(name, operator) {
                     return false;
                 }
             }
@@ -643,7 +643,7 @@ pub(crate) fn parse(text: &str) -> (Option<Selector>, usize) {
 
         let token = match token {
             Ok(t) => t,
-            Err(e) => {
+            Err(_e) => {
                 return (None, tokenizer.stream.pos());
             }
         };

@@ -2,7 +2,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, WindowDesc, WidgetExt, Lens, Data};
+use druid::{AppLauncher, WindowDesc, Lens, Data};
 
 #[derive(Default,Clone,Data,Lens)]
 struct MyApplication {
@@ -18,8 +18,8 @@ fn build_main() -> impl druid::Widget<MyApplication> {
     let child = {
             let mut flex = druid::widget::Flex::row();
             let child = {
-                    let mut label = druid_xml::widget::DXLabel::new("MyApplication");
-                    let mut normal_style =
+                    let label = druid_xml::widget::DXLabel::new("MyApplication");
+                    let normal_style =
                     druid_xml::simple_style::Styler {
                          padding : (None, None),
                          margin : (None, None),
@@ -37,11 +37,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                     None,
                     ];
                     let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                    let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                    label
+                    
+                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
             };
             flex.add_flex_child(child, 1f64);
-            let mut normal_style =
+            let normal_style =
             druid_xml::simple_style::Styler {
                  padding : (None, None),
                  margin : (None, None),
@@ -59,8 +59,8 @@ fn build_main() -> impl druid::Widget<MyApplication> {
             None,
             ];
             let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-            let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-            flex
+            
+            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
     };
     flex.add_child( child );
     let child = {
@@ -72,8 +72,8 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             let custom_widget = {
                                     let mut flex = druid::widget::Flex::column();
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("⌚");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("⌚");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -91,14 +91,14 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     println!("1");
                                     flex.add_child( child );
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("Time");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("Time");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -116,11 +116,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     flex.add_child( child );
-                                    let mut normal_style =
+                                    let normal_style =
                                     druid_xml::simple_style::Styler {
                                          padding : (None, None),
                                          margin : (None, None),
@@ -138,10 +138,10 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                     None,
                                     ];
                                     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                    flex
+                                    
+                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                             };
-                            let mut normal_style =
+                            let normal_style =
                             druid_xml::simple_style::Styler {
                                  padding : (None, None),
                                  margin : (None, None),
@@ -159,16 +159,16 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             None,
                             ];
                             let custom_widget = druid::WidgetExt::padding( custom_widget, druid_xml::widget::theme::PADDING );
-                            let custom_widget = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget );
-                            custom_widget
+                            
+                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget )
                     };
                     flex.add_child( child );
                     let child = {
                             let custom_widget = {
                                     let mut flex = druid::widget::Flex::column();
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("⌛");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("⌛");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -186,14 +186,14 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     flex.add_child( child );
                                     println!("2");
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("Count");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("Count");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -211,11 +211,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     flex.add_child( child );
-                                    let mut normal_style =
+                                    let normal_style =
                                     druid_xml::simple_style::Styler {
                                          padding : (None, None),
                                          margin : (None, None),
@@ -233,10 +233,10 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                     None,
                                     ];
                                     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                    flex
+                                    
+                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                             };
-                            let mut normal_style =
+                            let normal_style =
                             druid_xml::simple_style::Styler {
                                  padding : (None, None),
                                  margin : (None, None),
@@ -254,16 +254,16 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             None,
                             ];
                             let custom_widget = druid::WidgetExt::padding( custom_widget, druid_xml::widget::theme::PADDING );
-                            let custom_widget = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget );
-                            custom_widget
+                            
+                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget )
                     };
                     flex.add_child( child );
                     let child = {
                             let custom_widget = {
                                     let mut flex = druid::widget::Flex::column();
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("✅");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("✅");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -281,13 +281,13 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     flex.add_child( child );
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("Todo");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("Todo");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -305,11 +305,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     flex.add_child( child );
-                                    let mut normal_style =
+                                    let normal_style =
                                     druid_xml::simple_style::Styler {
                                          padding : (None, None),
                                          margin : (None, None),
@@ -327,10 +327,10 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                     None,
                                     ];
                                     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                    flex
+                                    
+                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                             };
-                            let mut normal_style =
+                            let normal_style =
                             druid_xml::simple_style::Styler {
                                  padding : (None, None),
                                  margin : (None, None),
@@ -348,8 +348,8 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             None,
                             ];
                             let custom_widget = druid::WidgetExt::padding( custom_widget, druid_xml::widget::theme::PADDING );
-                            let custom_widget = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget );
-                            custom_widget
+                            
+                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget )
                     };
                     flex.add_child( child );
                     println!("3");
@@ -357,8 +357,8 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             let custom_widget = {
                                     let mut flex = druid::widget::Flex::column();
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("⚽");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("⚽");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -376,13 +376,13 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     flex.add_child( child );
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("Play");
-                                            let mut normal_style =
+                                            let label = druid_xml::widget::DXLabel::new("Play");
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -400,11 +400,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                            let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                                            label
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                     };
                                     flex.add_child( child );
-                                    let mut normal_style =
+                                    let normal_style =
                                     druid_xml::simple_style::Styler {
                                          padding : (None, None),
                                          margin : (None, None),
@@ -422,10 +422,10 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                     None,
                                     ];
                                     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                    flex
+                                    
+                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                             };
-                            let mut normal_style =
+                            let normal_style =
                             druid_xml::simple_style::Styler {
                                  padding : (None, None),
                                  margin : (None, None),
@@ -444,11 +444,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             ];
                             let custom_widget = druid::WidgetExt::fix_width(custom_widget, 40f64);
                             let custom_widget = druid::WidgetExt::padding( custom_widget, druid_xml::widget::theme::PADDING );
-                            let custom_widget = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget );
-                            custom_widget
+                            
+                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget )
                     };
                     flex.add_child( child );
-                    let mut normal_style =
+                    let normal_style =
                     druid_xml::simple_style::Styler {
                          padding : (None, None),
                          margin : (None, None),
@@ -466,10 +466,10 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                     None,
                     ];
                     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                    flex
+                    
+                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
             };
-            let mut normal_style =
+            let normal_style =
             druid_xml::simple_style::Styler {
                  padding : (None, None),
                  margin : (None, None),
@@ -487,8 +487,8 @@ fn build_main() -> impl druid::Widget<MyApplication> {
             None,
             ];
             let custom_widget = druid::WidgetExt::padding( custom_widget, druid_xml::widget::theme::PADDING );
-            let custom_widget = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget );
-            custom_widget
+            
+            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget )
     };
     flex.add_child( child );
     flex.add_default_spacer( );
@@ -498,9 +498,9 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             let custom_widget = {
                                     let mut flex = druid::widget::Flex::column();
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("Some1");
+                                            let label = druid_xml::widget::DXLabel::new("Some1");
                                             let button = druid_xml::widget::DXButton::from_label(label);
-                                            let mut normal_style =
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -518,14 +518,14 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let button = druid::WidgetExt::padding( button, druid_xml::widget::theme::PADDING );
-                                            let button = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, button );
-                                            button
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, button )
                                     };
                                     flex.add_child( child );
                                     let child = {
-                                            let mut label = druid_xml::widget::DXLabel::new("Some2");
+                                            let label = druid_xml::widget::DXLabel::new("Some2");
                                             let button = druid_xml::widget::DXButton::from_label(label);
-                                            let mut normal_style =
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -543,11 +543,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let button = druid::WidgetExt::padding( button, druid_xml::widget::theme::PADDING );
-                                            let button = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, button );
-                                            button
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, button )
                                     };
                                     flex.add_child( child );
-                                    let mut normal_style =
+                                    let normal_style =
                                     druid_xml::simple_style::Styler {
                                          padding : (None, None),
                                          margin : (None, None),
@@ -565,10 +565,10 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                     None,
                                     ];
                                     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                    flex
+                                    
+                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                             };
-                            let mut normal_style =
+                            let normal_style =
                             druid_xml::simple_style::Styler {
                                  padding : (None, None),
                                  margin : (None, None),
@@ -586,16 +586,16 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             None,
                             ];
                             let custom_widget = druid::WidgetExt::padding( custom_widget, druid_xml::widget::theme::PADDING );
-                            let custom_widget = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget );
-                            custom_widget
+                            
+                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget )
                     };                      let two = {
                             let custom_widget = {
                                     let mut flex = druid::widget::Flex::column();
                                     let child = {
                                             let mut flex = druid::widget::Flex::row();
                                             let child = {
-                                                    let mut label = druid_xml::widget::DXLabel::new("Name");
-                                                    let mut normal_style =
+                                                    let label = druid_xml::widget::DXLabel::new("Name");
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -613,14 +613,14 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     None,
                                                     ];
                                                     let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                                    let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );     
-                                                    label
+                                                         
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                             };
                                             println!("4");
                                             flex.add_child( child );
                                             let child = {
-                                                    let mut textbox = druid::widget::TextBox::new();
-                                                    let mut normal_style =
+                                                    let textbox = druid::widget::TextBox::new();
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -639,11 +639,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     ];
                                                     let textbox = druid::WidgetExt::lens(textbox, MyApplication::name);
                                                     let textbox = druid::WidgetExt::padding( textbox, druid_xml::widget::theme::PADDING );
-                                                    let textbox = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, textbox ); 
-                                                    textbox
+                                                     
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, textbox )
                                             };
                                             flex.add_flex_child(child, 1f64);
-                                            let mut normal_style =
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -661,15 +661,15 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                            let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                            flex
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                                     };
                                     flex.add_child( child );
                                     let child = {
                                             let mut flex = druid::widget::Flex::row();
                                             let child = {
-                                                    let mut label = druid_xml::widget::DXLabel::new("Address");
-                                                    let mut normal_style =
+                                                    let label = druid_xml::widget::DXLabel::new("Address");
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -687,13 +687,13 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     None,
                                                     ];
                                                     let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                                    let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );     
-                                                    label
+                                                         
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                             };
                                             flex.add_child( child );
                                             let child = {
-                                                    let mut textbox = druid::widget::TextBox::new();
-                                                    let mut normal_style =
+                                                    let textbox = druid::widget::TextBox::new();
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -712,11 +712,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     ];
                                                     let textbox = druid::WidgetExt::lens(textbox, MyApplication::address);
                                                     let textbox = druid::WidgetExt::padding( textbox, druid_xml::widget::theme::PADDING );
-                                                    let textbox = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, textbox ); 
-                                                    textbox
+                                                     
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, textbox )
                                             };
                                             flex.add_flex_child(child, 1f64);
-                                            let mut normal_style =
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -734,15 +734,15 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                            let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                            flex
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                                     };
                                     flex.add_child( child );
                                     let child = {
                                             let mut flex = druid::widget::Flex::row();
                                             let child = {
-                                                    let mut label = druid_xml::widget::DXLabel::new("Hot?");
-                                                    let mut normal_style =
+                                                    let label = druid_xml::widget::DXLabel::new("Hot?");
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -760,14 +760,14 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     None,
                                                     ];
                                                     let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                                    let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );     
-                                                    label
+                                                         
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                             };
                                             flex.add_child( child );
                                             println!("5");
                                             let child = {
-                                                    let mut switch = druid::widget::Switch::new();
-                                                    let mut normal_style =
+                                                    let switch = druid::widget::Switch::new();
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -786,11 +786,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     ];
                                                     let switch = druid::WidgetExt::lens(switch, MyApplication::hot);
                                                     let switch = druid::WidgetExt::padding( switch, druid_xml::widget::theme::PADDING );
-                                                    let switch = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, switch );   
-                                                    switch
+                                                       
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, switch )
                                             };
                                             flex.add_flex_child(child, 1f64);
-                                            let mut normal_style =
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -808,15 +808,15 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                            let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                            flex
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                                     };
                                     flex.add_child( child );
                                     let child = {
                                             let mut flex = druid::widget::Flex::row();
                                             let child = {
-                                                    let mut label = druid_xml::widget::DXLabel::new("Human?");
-                                                    let mut normal_style =
+                                                    let label = druid_xml::widget::DXLabel::new("Human?");
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -834,13 +834,13 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     None,
                                                     ];
                                                     let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                                                    let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );     
-                                                    label
+                                                         
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
                                             };
                                             flex.add_child( child );
                                             let child = {
                                                     let checkbox = druid::widget::Checkbox::new("Yes");
-                                                    let mut normal_style =
+                                                    let normal_style =
                                                     druid_xml::simple_style::Styler {
                                                          padding : (None, None),
                                                          margin : (None, None),
@@ -859,11 +859,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                                     ];
                                                     let checkbox = druid::WidgetExt::lens(checkbox, MyApplication::human);
                                                     let checkbox = druid::WidgetExt::padding( checkbox, druid_xml::widget::theme::PADDING );        
-                                                    let checkbox = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, checkbox );
-                                                    checkbox
+                                                    
+                                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, checkbox )
                                             };
                                             flex.add_flex_child(child, 1f64);
-                                            let mut normal_style =
+                                            let normal_style =
                                             druid_xml::simple_style::Styler {
                                                  padding : (None, None),
                                                  margin : (None, None),
@@ -881,11 +881,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                             None,
                                             ];
                                             let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                            let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                            flex
+                                            
+                                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                                     };
                                     flex.add_child( child );
-                                    let mut normal_style =
+                                    let normal_style =
                                     druid_xml::simple_style::Styler {
                                          padding : (None, None),
                                          margin : (None, None),
@@ -903,10 +903,10 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                                     None,
                                     ];
                                     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-                                    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-                                    flex
+                                    
+                                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
                             };
-                            let mut normal_style =
+                            let normal_style =
                             druid_xml::simple_style::Styler {
                                  padding : (None, None),
                                  margin : (None, None),
@@ -924,14 +924,14 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                             None,
                             ];
                             let custom_widget = druid::WidgetExt::padding( custom_widget, druid_xml::widget::theme::PADDING );
-                            let custom_widget = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget );
-                            custom_widget
+                            
+                            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, custom_widget )
                     };                      let mut split = druid::widget::Split::columns(one, two);
                     split = split.split_point(0.3f64);
                     split = split.bar_size(3f64);
                     split = split.draggable(true);
                     split = split.solid_bar(true);
-                    let mut normal_style =
+                    let normal_style =
                     druid_xml::simple_style::Styler {
                          padding : (None, None),
                          margin : (None, None),
@@ -950,11 +950,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                     ];
                     let split = druid::WidgetExt::fix_height(split, 200f64);
                     let split = druid::WidgetExt::padding( split, druid_xml::widget::theme::PADDING );
-                    let split = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, split );
-                    split
+                    
+                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, split )
             };              let two = {
-                    let mut label = druid_xml::widget::DXLabel::new("Status");
-                    let mut normal_style =
+                    let label = druid_xml::widget::DXLabel::new("Status");
+                    let normal_style =
                     druid_xml::simple_style::Styler {
                          padding : (None, None),
                          margin : (None, None),
@@ -972,11 +972,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
                     None,
                     ];
                     let label = druid::WidgetExt::padding( label, druid_xml::widget::theme::PADDING );
-                    let label = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label );
-                    label
+                    
+                    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, label )
             };              let mut split = druid::widget::Split::rows(one, two);
             split = split.split_point(0.9f64);
-            let mut normal_style =
+            let normal_style =
             druid_xml::simple_style::Styler {
                  padding : (None, None),
                  margin : (None, None),
@@ -994,11 +994,11 @@ fn build_main() -> impl druid::Widget<MyApplication> {
             None,
             ];
             let split = druid::WidgetExt::padding( split, druid_xml::widget::theme::PADDING );
-            let split = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, split );
-            split
+            
+            druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, split )
     };
     flex.add_flex_child(child, 1f64);
-    let mut normal_style =
+    let normal_style =
     druid_xml::simple_style::Styler {
          padding : (None, None),
          margin : (None, None),
@@ -1016,8 +1016,8 @@ fn build_main() -> impl druid::Widget<MyApplication> {
     None,
     ];
     let flex = druid::WidgetExt::padding( flex, druid_xml::widget::theme::PADDING );
-    let flex = druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex );
-    flex
+    
+    druid_xml::widget::SimpleStyleWidget::new(normal_style, pseudo_styles, flex )
 }
 
 

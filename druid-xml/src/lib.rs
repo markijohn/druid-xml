@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use quick_xml::events::attributes::Attributes;
 use quick_xml::reader::Reader;
-use quick_xml::events::{Event, BytesStart, BytesText};
+use quick_xml::events::{Event, BytesStart};
 use quick_xml::name::QName;
 use simplecss::{StyleSheet};
 
@@ -26,16 +26,16 @@ struct DummyLens<T,A> {
 
 impl <T,A> DummyLens<T,A> {
     fn new(a : A) -> Self {
-        Self { o : PhantomData, a : a }
+        Self { o : PhantomData, a }
     }
 }
 
 impl <T:druid::Data,U> druid::Lens<T, U> for DummyLens<T,U> {
-    fn with<V, F: FnOnce(&U) -> V>(&self, data: &T, f: F) -> V {
+    fn with<V, F: FnOnce(&U) -> V>(&self, _data: &T, f: F) -> V {
         f(&self.a)
     }
 
-    fn with_mut<V, F: FnOnce(&mut U) -> V>(&self, data: &mut T, f: F) -> V {
+    fn with_mut<V, F: FnOnce(&mut U) -> V>(&self, _data: &mut T, f: F) -> V {
         #[allow(mutable_transmutes)]
         f( unsafe { std::mem::transmute::<&U,&mut U>(&self.a) } )
     }
@@ -185,7 +185,7 @@ pub(crate) trait AttributeGetter {
 		let e = self.get_result(name)?;
 		match String::from_utf8_lossy(&e).parse::<T>() {
 			Ok(e) => Ok(e),
-			Err(e) => Err(Error::InvalidAttributeValue( (self.pos(),name) ))
+			Err(_e) => Err(Error::InvalidAttributeValue( (self.pos(),name) ))
 		}
 	}
 
@@ -208,7 +208,7 @@ impl <'a> AttributeGetter for AttributesWrapper<'a> {
 		).map( |e|  {
 			let value = e.unwrap().value;
 			let ck_value = String::from_utf8_lossy(&value);
-			if ck_value.starts_with("${") && ck_value.ends_with("}") {
+			if ck_value.starts_with("${") && ck_value.ends_with('}') {
 				if let Some(rel) = self.rel_attrs {
 					let key = &ck_value[2..ck_value.len()-1];
 					if let Some(alter_value) = rel.get(key.as_bytes() ) {
@@ -260,7 +260,7 @@ pub fn compile(xml:&str, wrappers:&HashMap<String,String>) -> Result<String,Erro
 						if let Some(elem) = parse_element(pos, Some(Event::Start(e)), &mut reader )? {
 							let fnname = elem.attributes( None ).get_as_result::<String>("fn")?;
 							last_widget = Some(fnname.clone());
-                            if fnname.find("main").is_some() {
+                            if fnname.contains("main") {
                                 expected_main_widget = Some(fnname);
                             }
 							elem_map.insert( elem.attributes( None ).get_as_result::<String>("fn")?, elem);
@@ -294,7 +294,7 @@ pub fn compile(xml:&str, wrappers:&HashMap<String,String>) -> Result<String,Erro
 			let lens = attrs.get_result("lens")?;
 			let lens = String::from_utf8_lossy( lens.as_ref() );
 			writer.write_raw(&format!("fn {fn_name}() -> impl druid::Widget<{lens}> {{\n") ).unwrap();
-			writer.write(&elem_map, &elem, &style, wrappers).unwrap();
+			writer.write(&elem_map, elem, &style, wrappers).unwrap();
 			writer.write_raw("}\n").unwrap();
         } else {
             panic!();
@@ -320,7 +320,7 @@ impl <'a> Iterator for AttributeIter<'a> {
 	type Item = (&'a [u8], Cow<'a,[u8]>);
 
 	fn next(&mut self) -> Option<Self::Item> {
-		while let Some(e) = self.attrs.next() {
+		for e in self.attrs.by_ref() {
 			if let Ok(attr) = e {
 				return Some( (
 					attr.key.into_inner()
@@ -448,7 +448,7 @@ fn parse_element<'a>(mut src_pos:usize, mut backward:Option<Event<'a>>, reader:&
 				}
 			},
 			Err(e) => return Err(Error::XMLSyntaxError( (src_pos,e) )),
-			_etc@ _ => {
+			_etc => {
 				unimplemented!()
 			}
 		}
@@ -744,13 +744,13 @@ mod test {
 		css.parse_more(css2);
 		println!("\n\ntwo : {:#?}", css);
 
-		let mut css = simplecss::StyleSheet::parse(r#"
+		let css = simplecss::StyleSheet::parse(r#"
 		label { color:black; font-size:16px }
 		.my_label { color:yellow; font-size:1.6em }
 		#my_special_label { color:cyan; font-soze:24px }
 		"#);
 		for rule in css.rules {
-			println!("{} : {:?}", rule.selector.to_string(), rule.selector.specificity());
+			println!("{} : {:?}", rule.selector, rule.selector.specificity());
 		}
 	}
 

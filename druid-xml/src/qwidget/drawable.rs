@@ -1,9 +1,9 @@
-use std::borrow::Cow;
-use std::collections::BTreeMap;
+
+
 use druid::{RoundedRectRadii, Vec2};
-use druid::{Point,Size,Insets,Color,LinearGradient,RadialGradient, Widget, PaintCtx, Env, widget::BackgroundBrush, RenderContext};
+use druid::{Point,Color,LinearGradient,RadialGradient, PaintCtx, widget::BackgroundBrush, RenderContext};
 use druid::kurbo::{Line, Circle, Arc, RoundedRect, Ellipse, Shape};
-use druid::piet::{StrokeStyle, IntoBrush};
+use druid::piet::{StrokeStyle};
 use fasteval2::{Instruction, Slab, Evaler, Compiler};
 use std::str::FromStr;
 
@@ -28,7 +28,7 @@ impl Calculator {
 
     pub fn calc(&self, cvar:&mut CalcVars) -> f64 {
         let (inst,slab) = &self.cached;
-        inst.eval(&slab, cvar).unwrap()
+        inst.eval(slab, cvar).unwrap()
     }
 }
 
@@ -69,9 +69,9 @@ impl FromStr for Number {
             let splits = s[5 .. s.len()-1].split( '%');
             let mut expr_str:String = String::new();
             splits.for_each( |e| {
-                if e.ends_with("%") 
+                if e.ends_with('%') 
                 && e.len() > 1 
-                && e.chars().rev().skip(1).next().unwrap().is_numeric() {
+                && e.chars().rev().nth(1).unwrap().is_numeric() {
                     let s = e[..e.len()-1].rfind( |c:char| !c.is_numeric() ).unwrap_or(0);
                     write!(&mut expr_str, "__size_perc_{}", &e[s .. e.len()-1].parse::<f64>().unwrap() / 100f64 ).unwrap();
                 } else {
@@ -223,7 +223,7 @@ impl DrawableStack {
 
     pub fn draw(&self, time:f64, ctx:&mut PaintCtx) {
         let mut last_point = (0., 0.);
-        let mut last_style = Default::default();
+        let last_style = Default::default();
         let bounds = ctx.size().to_rect();
         let width = bounds.width();
         let height = bounds.height();
@@ -278,7 +278,7 @@ impl DrawableStack {
 
     pub fn to_background<T>(self) -> BackgroundBrush<T> {
         let painter_fn = Box::new( 
-            move |ctx:&mut druid::PaintCtx, t:&T, env:&druid::Env| {
+            move |ctx:&mut druid::PaintCtx, _t:&T, _env:&druid::Env| {
                 self.draw(0. , ctx);
             }
         );

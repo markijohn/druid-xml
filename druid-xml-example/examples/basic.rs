@@ -9,19 +9,19 @@ fn build_main_actual() -> impl druid::Widget<()> {
     let child = {
             let mut flex = druid::widget::Flex::row();
             let child = {
-                    let mut label = druid::widget::Label::new("Hello Druid!");
-                    label
+                    
+                    druid::widget::Label::new("Hello Druid!")
             };
             flex.add_flex_child(child, 1f64);
             let child = {
                     let mut label = druid::widget::Label::new("OK");
                     let button = druid::widget::Button::from_label(label);
-                    let button = (|btn:druid::widget::Button<()>| {
+                    
+                    (|btn:druid::widget::Button<()>| {
                             btn.on_click( |_,_,_| {
                                     println!("On clicked");
                             })
-                    }) (button);
-                    button
+                    }) (button)
             };
             flex.add_flex_child(child, 1f64);
             flex
@@ -29,8 +29,8 @@ fn build_main_actual() -> impl druid::Widget<()> {
     };
     flex.add_child( child );
     let child = {
-            let mut label = druid::widget::Label::new("Second");
-            label
+            
+            druid::widget::Label::new("Second")
     };
     flex.add_child( child );
     flex

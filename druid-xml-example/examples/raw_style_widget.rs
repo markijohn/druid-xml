@@ -1,11 +1,11 @@
-use std::str::FromStr;
 
-use druid::kurbo::Ellipse;
-use druid::piet::StrokeStyle;
+
+
+
 use druid::widget::{Flex, TextBox};
-use druid::{AppLauncher, WindowDesc, widget::{Label,Button} };
-use druid::{WidgetExt, Color, Vec2, Insets};
-use druid_xml::qwidget::drawable::*;
+use druid::{AppLauncher, WindowDesc, widget::{Button} };
+use druid::{WidgetExt, Color, Insets};
+
 use druid_xml::simple_style::{BorderStyle, Styler, AnimationState, Animation, Direction, TimingFunction, PseudoStyle};
 use druid_xml::widget::button::DXButton;
 use druid_xml::widget::label::DXLabel;
@@ -18,7 +18,7 @@ use druid_xml::widget::theme;
 // padding area include as background paint but margin is not
 
 fn main() {
-	let simple_linear_anim = Some(AnimationState::from( Animation{ delay: 0, direction: Direction::Normal, duration: 1000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } ));
+	let simple_linear_anim = Some(AnimationState::from( Animation{ delay: 0, direction: Direction::Normal, duration: 1_000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } ));
 	let simple_linear_anim_half = Some(AnimationState::from( Animation{ delay: 0, direction: Direction::Normal, duration: 500_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 0. } ));
 
 	let normal_style = Styler {
@@ -47,13 +47,13 @@ fn main() {
 		None
 	];
 	//let origin = DXLabel::new("Margin Animation").padding(druid_xml::widget::theme::PADDING ).on_click( |ctx, data,env| println!("Clicked2"));
-	let origin = TextBox::new().padding(druid_xml::widget::theme::PADDING ).on_click( |ctx, data,env| println!("Clicked2"));
+	let origin = TextBox::new().padding(druid_xml::widget::theme::PADDING ).on_click( |_ctx, _data,_env| println!("Clicked2"));
 	let margin_style_widget = SimpleStyleWidget::new(normal_style, pseudo_styles, origin );
 
 	let normal_style = Styler {
 		padding: (Some(Insets::new(55., 15., 15., 5.)), simple_linear_anim.clone() ),
 		margin : (Some(Insets::new(0., 10., 0., 0.)), None ),
-		font_size: (Some(14.), simple_linear_anim_half.clone() ),
+		font_size: (Some(14.), simple_linear_anim_half ),
 		width: (None,None),
 		height: (None,None),
 		text_color: (Some(Color::rgb8(0,0,255)), simple_linear_anim.clone() ),
@@ -75,7 +75,7 @@ fn main() {
 		None,
 		None
 	];
-	let origin = DXLabel::new("Padding Animation").padding(theme::PADDING ).on_click( |ctx, data,env| println!("Clicked"));
+	let origin = DXLabel::new("Padding Animation").padding(theme::PADDING ).on_click( |_ctx, _data,_env| println!("Clicked"));
 	let padding_style_widget = SimpleStyleWidget::new(normal_style, pseudo_styles, origin );
 
 	let normal_style = Styler {
@@ -113,7 +113,7 @@ fn main() {
 		None,
 		None
 	];
-	let origin = DXButton::new("None Animation").padding(theme::PADDING ).on_click( |ctx, data,env| println!("Clicked"));
+	let origin = DXButton::new("None Animation").padding(theme::PADDING ).on_click( |_ctx, _data,_env| println!("Clicked"));
 	let none_anim_widget = SimpleStyleWidget::new(normal_style, pseudo_styles, origin );
 
 	let flex = Flex::column()

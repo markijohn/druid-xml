@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, WindowDesc, Data, Lens};
+use druid::{AppLauncher, WindowDesc};
 
 pub fn main() {
     druid_xml!(

@@ -21,16 +21,16 @@ pub struct Timeline {
 pub struct TimelineBar;
 
 impl Widget<Timeline> for TimelineBar {
-    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut Timeline, env: &Env) {
+    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, _data: &mut Timeline, _env: &Env) {
     }
 
-    fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &Timeline, env: &Env) {
+    fn lifecycle(&mut self, _ctx: &mut LifeCycleCtx, _event: &LifeCycle, _data: &Timeline, _env: &Env) {
     }
 
-    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &Timeline, data: &Timeline, env: &Env) {
+    fn update(&mut self, _ctx: &mut UpdateCtx, _old_data: &Timeline, _data: &Timeline, _env: &Env) {
     }
 
-    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &Timeline, env: &Env) -> Size {
+    fn layout(&mut self, _ctx: &mut LayoutCtx, bc: &BoxConstraints, _data: &Timeline, _env: &Env) -> Size {
         // BoxConstraints are passed by the parent widget.
         // This method can return any Size within those constraints:
         // bc.constrain(my_size)
@@ -50,7 +50,7 @@ impl Widget<Timeline> for TimelineBar {
         }
     }
 
-    fn paint(&mut self, ctx: &mut PaintCtx, data: &Timeline, env: &Env) {
+    fn paint(&mut self, ctx: &mut PaintCtx, _data: &Timeline, _env: &Env) {
         let size = ctx.size();
         ctx.stroke(Rect::new(0., 0., size.width, size.height), &Color::rgb8(0,0,200), 1.);
     }

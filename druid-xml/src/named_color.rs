@@ -142,7 +142,7 @@ pub(crate) fn named_color(name:&str) -> Option<&'static str> {
         "maroon"               => "druid::Color::rgb8(128,0,0)",    //	#800000	
         _ => ""
     };
-    if rgb8 == "" {
+    if rgb8.is_empty() {
         None
     } else {
         Some(rgb8)

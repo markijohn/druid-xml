@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate druid_xml_macro;
 
-use druid::{AppLauncher, WindowDesc, WidgetExt};
+use druid::{AppLauncher, WindowDesc};
 
 fn main() {
     druid_xml!(

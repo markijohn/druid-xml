@@ -21,7 +21,7 @@ impl Widget<JSValue> for Label<String> {
     }
 
     fn update(&mut self, ctx: &mut druid::UpdateCtx, old_data: &JSValue, data: &JSValue, env: &druid::Env) {
-        if let (Value::String(s1), Value::String(s2)) = (old_data.deref(),data.deref()) {
+        if let (Value::String(_s1), Value::String(_s2)) = (old_data.deref(),data.deref()) {
 			Label::<String>::update(self, ctx, old_data, data, env);
 		}
     }
@@ -56,7 +56,7 @@ impl Widget<JSValue> for TextBox<String> {
     }
 
     fn update(&mut self, ctx: &mut druid::UpdateCtx, old_data: &JSValue, data: &JSValue, env: &druid::Env) {
-        if let (Value::String(s1), Value::String(s2)) = (old_data.deref(),data.deref()) {
+        if let (Value::String(_s1), Value::String(_s2)) = (old_data.deref(),data.deref()) {
 			TextBox::<String>::update(self, ctx, old_data, data, env);
 		}
     }

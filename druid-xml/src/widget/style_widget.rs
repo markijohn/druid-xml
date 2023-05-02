@@ -1,7 +1,7 @@
-use crate::simple_style::{Styler, BorderStyle, Style, PseudoStyle, Pseudo};
-use druid::kurbo::{Insets, Point, Rect, Size, RoundedRect};
+use crate::simple_style::{Styler, Style, PseudoStyle, Pseudo};
+use druid::kurbo::{Point, Rect, Size, RoundedRect};
 use druid::widget::Axis;
-use druid::{BoxConstraints, Color, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx,
+use druid::{BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx, PaintCtx,
     RenderContext, UpdateCtx, Widget, WidgetPod, MouseButton};
 use super::theme;
 
@@ -202,7 +202,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
 					}
 				)
 				.map( |e| &e.as_ref().unwrap().style )
-				.filter( |e| {
+				.filter( |_e| {
 					true
 				})
 			);
@@ -269,7 +269,7 @@ impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
         self.inner.lifecycle(ctx, event, data, env);
     }
 
-    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &T, data: &T, env: &Env) {
+    fn update(&mut self, ctx: &mut UpdateCtx, _old_data: &T, data: &T, env: &Env) {
         self.inner.update(ctx, data, env);
     }
 

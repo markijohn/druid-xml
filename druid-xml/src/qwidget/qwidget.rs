@@ -1,6 +1,6 @@
-use std::{borrow::{Cow, BorrowMut, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref, DerefMut}, collections::HashSet, collections::HashMap};
+use std::{borrow::{Cow, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref}, collections::HashSet, collections::HashMap};
 
-use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size, Insets, Point, WidgetPod, widget::Axis};
+use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size, WidgetPod};
 use serde_json::Value;
 use simplecss::{Selector, Element};
 
@@ -50,7 +50,7 @@ impl <'a> QWidgetContext<'a> {
         }
     }
 
-    pub fn draw(ctx:&PaintCtx) {
+    pub fn draw(_ctx:&PaintCtx) {
 
     }
 }
@@ -84,7 +84,7 @@ impl Element for QWidget {
     fn prev_sibling_element(&self) -> Option<Self> {
         unsafe { 
             if let Some(parent) = (*self.0.get()).parent.as_ref() {
-                if let Some(find) = (*parent.0.get()).childs.iter().skip(1).enumerate().find( |(i,e)| Rc::ptr_eq(&e.0, &self.0)) { //e.0.get() == self.0.get() ) {
+                if let Some(find) = (*parent.0.get()).childs.iter().skip(1).enumerate().find( |(_i,e)| Rc::ptr_eq(&e.0, &self.0)) { //e.0.get() == self.0.get() ) {
                     return Some( (*parent.0.get()).childs[find.0].clone() )
                 }
             }
@@ -118,13 +118,13 @@ impl Element for QWidget {
         }
     }
 
-    fn pseudo_class_matches(&self, class: simplecss::PseudoClass) -> bool {
+    fn pseudo_class_matches(&self, _class: simplecss::PseudoClass) -> bool {
         todo!()
     }
 }
 
 impl Queryable for QWidget {
-    fn find(&self, q:&str) -> QueryChain {
+    fn find(&self, _q:&str) -> QueryChain {
         //find in self
         QueryChain ( vec![ QWidget(self.0.clone()) ] )
     }
@@ -138,7 +138,7 @@ impl Queryable for QWidget {
         let mut parent = self.0.clone();
         
         loop {
-            if let Some(p_parent) = unsafe { (&*parent.get()).parent.as_ref() } {
+            if let Some(p_parent) = unsafe { (*parent.get()).parent.as_ref() } {
                 parent = p_parent.0.clone();
             } else {
                 break
@@ -150,7 +150,7 @@ impl Queryable for QWidget {
 
 impl Widget<JSValue> for QWidget {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut JSValue, env: &Env) {
-        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        let origin = unsafe { &mut (*self.0.get()).origin };
         origin.event(ctx, event, data, env);
 
         //hover animation check
@@ -164,17 +164,17 @@ impl Widget<JSValue> for QWidget {
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &JSValue, env: &Env) {
-        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        let origin = unsafe { &mut (*self.0.get()).origin };
         origin.lifecycle(ctx, event, data, env);
     }
 
-    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &JSValue, data: &JSValue, env: &Env) {
-        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+    fn update(&mut self, ctx: &mut UpdateCtx, _old_data: &JSValue, data: &JSValue, env: &Env) {
+        let origin = unsafe { &mut (*self.0.get()).origin };
         origin.update(ctx, data, env);
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &JSValue, env: &Env) -> Size {
-        let qraw = unsafe { (&mut *self.0.get()) };
+        let qraw = unsafe { &mut *self.0.get() };
         let origin = &mut qraw.origin;
         origin.layout(ctx,bc,data,env)
 
@@ -199,7 +199,7 @@ impl Widget<JSValue> for QWidget {
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &JSValue, env: &Env) {
         //TODO : DrawableStack
-        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        let origin = unsafe { &mut (*self.0.get()).origin };
         origin.paint(ctx, data, env);
     }
 
@@ -222,7 +222,7 @@ impl Widget<JSValue> for QWidget {
     // }
     
     fn id(&self) -> Option<WidgetId> {
-        let origin = unsafe { &mut (&mut *self.0.get()).origin };
+        let origin = unsafe { &mut (*self.0.get()).origin };
         Some( origin.id() )
     }
 
@@ -252,23 +252,23 @@ impl QueryChain {
     pub fn q(&self, q:&str) -> QueryChain {
         let mut chain = vec![];
         self.iter().for_each(|e| {
-            chain.extend( e.q(q).into_iter().map( |qw| qw.clone() ) );
+            chain.extend( e.q(q).iter().cloned() );
         });
         QueryChain::from(chain)
     }
 
-    pub fn set_class(&self, cls:&str) -> QueryChain {
+    pub fn set_class(&self, _cls:&str) -> QueryChain {
         // self.iter().for_each( |e| {
         //     e.set_class( cls );
         // })
         todo!()
     }
 
-    pub fn has_class(&self, cls:&str) -> bool {
+    pub fn has_class(&self, _cls:&str) -> bool {
         todo!()
     }
 
-    pub fn remove_class(&self, cls:&str) -> QueryChain {
+    pub fn remove_class(&self, _cls:&str) -> QueryChain {
         todo!()
     }
 
@@ -370,7 +370,7 @@ impl QueryChain {
         todo!()
     }
 
-    pub fn val(&self, new:Option<JSValue>) -> Option<&JSValue> {
+    pub fn val(&self, _new:Option<JSValue>) -> Option<&JSValue> {
         
         //json value
         todo!()
@@ -378,7 +378,7 @@ impl QueryChain {
 
     pub fn val_one(&self) -> Option<&JSValue> {
         if let Some(q) = self.0.get(0) {
-            let qw = unsafe { (&mut *q.0.get()) };
+            let qw = unsafe { &mut *q.0.get() };
             qw.attribute.get("value")
         } else {
             None

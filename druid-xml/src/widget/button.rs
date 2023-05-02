@@ -1,11 +1,11 @@
 //Button as DXLabel
 
 use druid::widget::prelude::*;
-use druid::widget::{Click, ControllerHost, Label, LabelText};
-use druid::{Affine, Data, Insets, LinearGradient, UnitPoint};
+use druid::widget::{Click, ControllerHost, LabelText};
+use druid::{Data, Insets};
 
 use super::label::DXLabel;
-use super::theme;
+
 
 // the minimum padding added to a button.
 // NOTE: these values are chosen to match the existing look of TextBox; these
@@ -56,7 +56,7 @@ impl<T: Data> DXButton<T> {
 }
 
 impl<T: Data> Widget<T> for DXButton<T> {
-    fn event(&mut self, ctx: &mut EventCtx, event: &Event, _data: &mut T, _env: &Env) { }
+    fn event(&mut self, _ctx: &mut EventCtx, _event: &Event, _data: &mut T, _env: &Env) { }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
         if let LifeCycle::HotChanged(_) | LifeCycle::DisabledChanged(_) = event {

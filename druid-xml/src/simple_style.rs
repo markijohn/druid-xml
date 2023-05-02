@@ -1,8 +1,8 @@
 #![allow(arithmetic_overflow)]
 
-use std::{rc::Rc, ops::{Deref, DerefMut}, time::Duration};
 
-use druid::{Size, Insets, Color, Rect, piet::StrokeStyle};
+
+use druid::{Insets, Color};
 
 use crate::{curve::AnimationCurve};
 
@@ -45,7 +45,7 @@ impl TimingFunction {
             TimingFunction::StepStart => todo!(),
             TimingFunction::StepEnd => todo!(),
             TimingFunction::CubicBezier { p1, p2, p3, p4 } => AnimationCurve::cubic(*p1, *p2, *p3, *p4).translate(t),
-            TimingFunction::Steps { n, jumpterm } => todo!(),
+            TimingFunction::Steps { n: _, jumpterm: _ } => todo!(),
         }
     }
 }
@@ -87,7 +87,7 @@ impl From<Animation> for AnimationState {
 impl AnimationState {
     pub fn transit<T:Transit>(&mut self,src:T, target:T, interval:i64) -> (bool,T) {
         let old_elapsed = self.elapsed;
-        //println!("elapsed interval duration {} {} {}", self.elapsed, interval, self.anim.duration);
+        //dbg!("elapsed interval duration {} {} {}", self.elapsed, interval, self.anim.duration);
 
         self.elapsed += interval;
         let has_more = 
@@ -109,7 +109,7 @@ impl AnimationState {
 
         //let alpha = self.anim.timing_function.translate( self.elapsed as f64 / self.anim.duration as f64 );
         let alpha = self.elapsed as f64 / self.anim.duration as f64;
-        // println!("alpha {} {} {} {}", self.elapsed, self.anim.duration, interval, alpha);
+        // dbg!("alpha {} {} {} {}", self.elapsed, self.anim.duration, interval, alpha);
 
         (has_more, src.transit(target, alpha))
     }
@@ -163,80 +163,21 @@ pub trait Transit {
     fn alpha(self, target:Self, status:Self) -> f64;
 }
 
-// impl Transit for f64 {
-//     fn transit(self, target:Self, alpha:f64) -> Self {
-//         let diff = target - self;
-//         self + diff * alpha
-//     }
-//     fn alpha(self, target:Self, status:Self) -> Self {
-//         let alpha = if target == self {
-//             //avoid zero divide and don't need animation
-//             1.
-//         } else {
-//             let max = target.max(self);
-//             let min = target.min(self);
-//             let n_alpha = (status.max(min) - status.min(min)) / (max - min);
-//             let n_alpha = if n_alpha < 0. {
-//                 0.
-//             } else if n_alpha > 1. {
-//                 1.
-//             } else {
-//                 n_alpha
-//             };
-//             //the direction
-//             if target < self {
-//                 1. - n_alpha
-//             } else {
-//                 n_alpha
-//             }
-//         };
-//         //alpha
-//         alpha.min(1.0).max(0.0)
-//     }
-// }
-
 impl Transit for f64 {
     fn transit(self, target:Self, alpha:f64) -> Self {     
         let diff = target - self;
         self + diff * alpha
     }
     fn alpha(self, target:Self, status:Self) -> Self {
-        let alpha = if target == self {
+        
+        if target == self {
             //avoid zero divide and don't need animation
             1.
         } else {
             ((status - self) / (target - self)).max(0.0).min(1.0)
-        };
-        alpha
+        }
     }
 }
-
-// impl Transit for f64 {
-//     fn transit(self, target: Self, alpha: f64) -> Self {
-//         let diff = target - self;
-//         self + diff * alpha
-//     }
-
-//     fn alpha(self, target: Self, status: Self) -> Self {
-//         if target == self {
-//             // If the target and the source are equal,
-//             // there is no need for animation.
-//             1.0
-//         } else {
-//             let (min, max) = if self < target {
-//                 (self, target)
-//             } else {
-//                 (target, self)
-//             };
-
-//             let diff = max - min;
-//             let clamped_status = status.max(min).min(max);
-//             let n_alpha = (clamped_status - min) / diff;
-//             //n_alpha.max(0.0).min(1.0)
-//             n_alpha.max(1.0).min(0.0)
-//         }
-//     }
-// }
 
 
 impl Transit for u8 {
@@ -259,37 +200,14 @@ impl Transit for u8 {
     }
 }
 
-// impl Transit for Insets {
-//     fn transit(self, target:Self, alpha:f64) -> Self {
-//         let diff_x0 = target.x0 - self.x0;
-//         let diff_y0 = target.y0 - self.y0;
-//         let diff_x1 = target.x1 - self.x1;
-//         let diff_y1 = target.y1 - self.y1;
-//         // println!("alpha  {}",alpha);
-//         // println!("diff  {} {} {} {}",diff_x0, diff_y0, diff_x1, diff_y1);
-//         Self { 
-//             x0: self.x0 + diff_x0 * alpha, 
-//             y0: self.y0 + diff_y0 * alpha, 
-//             x1: self.x1 + diff_x1 * alpha, 
-//             y1: self.y1 + diff_y1 * alpha 
-//         }
-//     }
-//     fn alpha(self, target:Self, status:Self) -> f64 {
-//         self.x0.alpha(target.x0, status.x0)
-//         .min( self.y0.alpha(target.y0, status.y0) )
-//         .min( self.x1.alpha(target.x1, status.x1) )
-//         .min( self.y1.alpha(target.y1, status.y1) )
-//     }
-// }
-
 impl Transit for Insets {
     fn transit(self, target: Self, alpha: f64) -> Self {
         let diff_x0 = target.x0 - self.x0;
         let diff_y0 = target.y0 - self.y0;
         let diff_x1 = target.x1 - self.x1;
         let diff_y1 = target.y1 - self.y1;
-        // println!("alpha  {}",alpha);
-        // println!("diff  {} {} {} {}",diff_x0, diff_y0, diff_x1, diff_y1);
+        // dbg!("alpha  {}",alpha);
+        // dbg!("diff  {} {} {} {}",diff_x0, diff_y0, diff_x1, diff_y1);
         Self { 
             x0: self.x0 + diff_x0 * alpha, 
             y0: self.y0 + diff_y0 * alpha, 
@@ -297,14 +215,6 @@ impl Transit for Insets {
             y1: self.y1 + diff_y1 * alpha 
         }
     }
-
-    // fn transit(self, target: Self, alpha: f64) -> Self {
-    //     let x0 = self.x0.transit(target.x0, alpha);
-    //     let y0 = self.y0.transit(target.y0, alpha);
-    //     let x1 = self.x1.transit(target.x1, alpha);
-    //     let y1 = self.y1.transit(target.y1, alpha);
-    //     Insets { x0, y0, x1, y1 }
-    // }
 
     fn alpha(self, target: Self, status: Self) -> f64 {
         // Calculate alpha values for each edge
@@ -318,9 +228,8 @@ impl Transit for Insets {
         let alpha = alpha_x0.min(alpha_y0).min(alpha_x1).min(alpha_y1);
         
         // Clamp alpha to [0, 1] range
-        let a = alpha.max(0.0).min(1.0);
-        println!("{a}");
-        a
+        
+        alpha.max(0.0).min(1.0)
     }
 }
 
@@ -350,19 +259,19 @@ impl Transit for Color {
         // .min( stb.abs_diff( tb ).abs_diff( sb ) )
         // .min( sta.abs_diff( ta ).abs_diff( sa ) );
 
-        // println!("mindiff col {} {:?} {:?} {:?}", min_diff, self, target, status);
+        // dbg!("mindiff col {} {:?} {:?} {:?}", min_diff, self, target, status);
         // min_diff as f64 / 255.
 
         // sr.alpha(tr,str)
         // .min( sg.alpha(tg, stg) )
         // .min( sb.alpha(tb, stb) )
         // .min( sa.alpha(ta, sta) )
-        let max_alpha = sr.alpha(tr, str)
+        
+        
+        sr.alpha(tr, str)
         .max(sg.alpha(tg, stg))
         .max(sb.alpha(tb, stb))
-        .max(sa.alpha(ta, sta));
-        
-        max_alpha
+        .max(sa.alpha(ta, sta))
     }
 }
 
@@ -534,7 +443,7 @@ impl Style {
                     ( _, Some(target_anim) ) => {
                         let transit = target_anim.transit( self.$item, target_style.$item.clone(), elapsed);
                         out.$item = transit.1.into();
-                        // println!("myanim {} my:{:?} target:{:?} transited:{:?}", stringify!($item), self.$item, target_style.$item, transit);
+                        // dbg!("myanim {} my:{:?} target:{:?} transited:{:?}", stringify!($item), self.$item, target_style.$item, transit);
                         (true, transit.0)
                     }
                     ( _, None) => {
@@ -542,10 +451,10 @@ impl Style {
                             if let (_,Some(target_anim)) = &mut default_styler.$item {
                                 let transit = target_anim.transit( self.$item, target_style.$item.clone(), elapsed);
                                 out.$item = transit.1.into();
-                                // println!("alter anim {} {:?}", stringify!($item), transit);
+                                // dbg!("alter anim {} {:?}", stringify!($item), transit);
                                 (true, transit.0)
                             } else {
-                                // println!("what");
+                                // dbg!("what");
                                 out.$item = target_style.$item.clone().into();
                                 (true, false)
                             }
@@ -584,7 +493,7 @@ impl Style {
         has_next_anim |= result.1;
 
         let result = transit_style!( font_size );
-        // println!("{elapsed} {} {} {:?}", out.font_size, self.font_size, target.font_size);
+        // dbg!("{elapsed} {} {} {:?}", out.font_size, self.font_size, target.font_size);
         layout_updated |= result.0;
         paint_updated |= result.0;
         has_next_anim |= result.1;
@@ -629,8 +538,8 @@ impl Styler {
         let mut padding = self.get_padding().unwrap_or_default();
 		let mut margin = self.get_margin().unwrap_or_default();
 		let mut font_size = self.get_font_size().unwrap_or( 14. );
-		let mut width = self.get_width();
-		let mut height = self.get_height();
+		let width = self.get_width();
+		let height = self.get_height();
 		let mut text_color = self.get_text_color().unwrap_or( Color::rgba8(0, 0, 0, 255) );
 		let mut background_color = self.get_background_color().unwrap_or( Color::rgba8(0, 0, 0, 0) );
 		let mut border = self.get_border().unwrap_or( BorderStyle::new(0., 0., Color::rgba8(0,0,0,0)) );
@@ -663,8 +572,8 @@ impl Styler {
                     
                     let alpha = start.$item.alpha( end.$item, curr.$item );
                     anim.elapsed = (anim.anim.duration as f64 * alpha) as i64;
-                    // println!("{} {:?}", stringify!($item), start.$item.transit(end.$item, alpha) );
-                    // println!("{} start:{:?} end:{:?} status:{:?} => {} {}", stringify!($item), start.$item, end.$item, curr.$item, alpha, anim.elapsed);
+                    // dbg!("{} {:?}", stringify!($item), start.$item.transit(end.$item, alpha) );
+                    // dbg!("{} start:{:?} end:{:?} status:{:?} => {} {}", stringify!($item), start.$item, end.$item, curr.$item, alpha, anim.elapsed);
                 }
             }
         }
@@ -707,10 +616,10 @@ impl Styler {
     }
 
     pub fn get_border(&self) -> Option<BorderStyle> {
-        self.border.0.clone()
+        self.border.0
     }
 
-    pub fn transit(&mut self, elapsed:i64, styler:&mut Styler, start:&Style, build:&mut Style) -> (bool,bool,bool) {
+    pub fn transit(&mut self, elapsed:i64, styler:&mut Styler, _start:&Style, build:&mut Style) -> (bool,bool,bool) {
         let mut layout_updated = false;
         let mut paint_updated = false;
         let mut has_next_anim = false;
@@ -778,51 +687,49 @@ impl Styler {
 
 #[cfg(test)]
 mod test {
-    use druid::Insets;
+    use super::*;
 
-    use crate::simple_style::{Styler, Animation, Direction, TimingFunction, AnimationState};
+    #[test]
+    fn calc_test() {
+        let anim = Animation { delay: 0., direction: Direction::Alternate, duration: 2000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 1. };
+        let anim_state = AnimationState::from( anim );
+        let mut styler = Styler {
+            padding: ( Some( Insets { x0: 10., y0: 10., x1: 20., y1: 20. } ), Some(anim_state.clone()) ),
+            margin: (None,None),
+            font_size: ( Some(12.), Some(anim_state.clone())),
+            width: (None,None),
+            height: (None,None),
+            text_color: (None,None),
+            background_color: (None,None),
+            border: (None,None),
+        };
 
-    // #[test]
-    // fn calc_test() {
-    //     let anim = Animation { delay: 0., direction: Direction::Alternate, duration: 2000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 1. };
-    //     let anim_state = AnimationState::from( anim );
-    //     let mut styler = Styler {
-    //         padding: ( Some( Insets { x0: 10., y0: 10., x1: 20., y1: 20. } ), Some(anim_state.clone()) ),
-    //         margin: (None,None),
-    //         font_size: ( Some(12.), Some(anim_state.clone())),
-    //         width: (None,None),
-    //         height: (None,None),
-    //         text_color: (None,None),
-    //         background_color: (None,None),
-    //         border: (None,None),
-    //     };
+        dbg!("Get Initial : {:?}", styler.get_padding());
 
-    //     println!("Get Initial : {:?}", styler.get_padding());
+        // //animation 50%
+        // let target = Some( Insets { x0: 20., y0: 20., x1: 40., y1: 40. } );
+        // let transit = styler.get_padding_with_anim( 1000_000_000, target);
+        // dbg!("+50%(=50%) progress forward : {:?}",  transit);
+        // assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
 
-    //     //animation 50%
-    //     let target = Some( Insets { x0: 20., y0: 20., x1: 40., y1: 40. } );
-    //     let transit = styler.get_padding_with_anim( 1000_000_000, target);
-    //     println!("+50%(=50%) progress forward : {:?}",  transit);
-    //     assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
+        // //animation 50% (with keep state)
+        // let transit = styler.get_padding_with_anim( 1000_000_000, target);
+        // dbg!("+50%(=100%) progress forward : {:?}",  transit);
+        // assert_eq!( transit.into(), (false,Some(Insets::new(20., 20., 40., 40.))) );
 
-    //     //animation 50% (with keep state)
-    //     let transit = styler.get_padding_with_anim( 1000_000_000, target);
-    //     println!("+50%(=100%) progress forward : {:?}",  transit);
-    //     assert_eq!( transit.into(), (false,Some(Insets::new(20., 20., 40., 40.))) );
+        // //animation overflowing
+        // let transit = styler.get_padding_with_anim( 1000_000_000, target);
+        // dbg!("+50%(=150% but keeped 100%) progress forward : {:?}",  transit);
+        // assert_eq!( transit.into(), (false,Some(Insets::new(20., 20., 40., 40.))) );
 
-    //     //animation overflowing
-    //     let transit = styler.get_padding_with_anim( 1000_000_000, target);
-    //     println!("+50%(=150% but keeped 100%) progress forward : {:?}",  transit);
-    //     assert_eq!( transit.into(), (false,Some(Insets::new(20., 20., 40., 40.))) );
+        // //backward 50% (current status is 100%)
+        // let transit = styler.get_padding_with_anim( -1000_000_000, target);
+        // dbg!("-50%(will be 50%) progress forward : {:?}",  transit);
+        // assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
 
-    //     //backward 50% (current status is 100%)
-    //     let transit = styler.get_padding_with_anim( -1000_000_000, target);
-    //     println!("-50%(will be 50%) progress forward : {:?}",  transit);
-    //     assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
-
-    //     let target = Some( 24. );
-    //     let transit = styler.get_font_size_with_anim( 1000_000_000, target);
-    //     println!("+50%(=50%) progress forward : {:?}",  transit);
-    //     //assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
-    // }
+        // let target = Some( 24. );
+        // let transit = styler.get_font_size_with_anim( 1000_000_000, target);
+        // dbg!("+50%(=50%) progress forward : {:?}",  transit);
+        //assert_eq!( transit.into(), (true,Some(Insets::new(15., 15., 30., 30.))) );
+    }
 }

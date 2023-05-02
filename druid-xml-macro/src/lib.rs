@@ -63,7 +63,7 @@ pub fn druid_xml( input:TokenStream ) -> TokenStream {
 					break
 				}
 			}
-			let maps = if maps.len() > 0 {
+			let maps = if !maps.is_empty() {
 				Some(maps)
 			} else {
 				None

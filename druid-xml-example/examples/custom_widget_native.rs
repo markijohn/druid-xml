@@ -74,7 +74,7 @@ fn demo_custom_widget() -> Box<dyn druid::Widget<()>> {
         // The paint method gets called last, after an event flow.
         // It goes event -> update -> layout -> paint, and each method can influence the next.
         // Basically, anything that changes the appearance of a widget causes a paint.
-        fn paint(&mut self, ctx: &mut PaintCtx, data: &(), env: &Env) {
+        fn paint(&mut self, ctx: &mut PaintCtx, _data: &(), env: &Env) {
             // Clear the whole widget with the color of your choice
             // (ctx.size() returns the size of the layout rect we're painting in)
             // Note: ctx also has a `clear` method, but that clears the whole context,

@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use quick_xml::events::BytesStart;
-use quick_xml::name::{self, QName};
+
+
 use simplecss::{Declaration, DeclarationTokenizer, StyleSheet, PseudoClass};
 use std::fmt::Write;
 
@@ -78,7 +78,7 @@ impl <'a> simplecss::Element for ElementQueryWrap<'a> {
 		if len > 0 {
 			Some( ElementQueryWrap {
                 parent_stack:&self.parent_stack[..len-1], 
-                elem:&self.parent_stack[len-1]
+                elem:self.parent_stack[len-1]
             } )
 		} else {
 			None
@@ -148,7 +148,7 @@ impl DruidGenerator {
 }
 
 impl DruidGenerator {
-    fn impl_write<'a>(&mut self, parameter:Option<&AttributesWrapper<'a>>, parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet, wrappers:&HashMap<String,String>) -> Result<(),Error> {
+    fn impl_write(&mut self, parameter:Option<&AttributesWrapper<'_>>, parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet, wrappers:&HashMap<String,String>) -> Result<(),Error> {
         let depth = parent_stack.len();
         let elem_query = ElementQueryWrap { parent_stack, elem };
 
@@ -283,7 +283,7 @@ impl DruidGenerator {
             } }
         }
 
-        let mut text = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("") );
+        let mut text = elem.text.as_ref().map( |e| String::from_utf8_lossy(e) ).unwrap_or( std::borrow::Cow::Borrowed("") );
 
         if text.starts_with("${") && text.ends_with('}') {
             let key = text[2..text.len()-1].trim();
@@ -337,14 +337,14 @@ impl DruidGenerator {
                 };
 
                 if pseudo.is_some() {
-                    has_pseudo_style = rule.declarations.iter().find( |e| e.name == "padding" ).is_some()
-                    | rule.declarations.iter().find( |e| e.name == "margin" ).is_some()
-                    | rule.declarations.iter().find( |e| e.name == "font-size" ).is_some()
-                    | rule.declarations.iter().find( |e| e.name == "width" ).is_some()
-                    | rule.declarations.iter().find( |e| e.name == "height" ).is_some()
-                    | rule.declarations.iter().find( |e| e.name == "color" ).is_some()
-                    | rule.declarations.iter().find( |e| e.name == "background-color" ).is_some()
-                    | rule.declarations.iter().find( |e| e.name == "border" ).is_some();
+                    has_pseudo_style = rule.declarations.iter().any(|e| e.name == "padding")
+                    | rule.declarations.iter().any(|e| e.name == "margin")
+                    | rule.declarations.iter().any(|e| e.name == "font-size")
+                    | rule.declarations.iter().any(|e| e.name == "width")
+                    | rule.declarations.iter().any(|e| e.name == "height")
+                    | rule.declarations.iter().any(|e| e.name == "color")
+                    | rule.declarations.iter().any(|e| e.name == "background-color")
+                    | rule.declarations.iter().any(|e| e.name == "border");
                     if has_pseudo_style {
                         break
                     }
@@ -358,8 +358,8 @@ impl DruidGenerator {
             } else {
                 src!("let mut flex = druid::widget::Flex::row();\n");
             }
-            if elem.childs.len() < 1 {
-                return Err(Error::InvalidFlexChildNum((elem.src_pos)))
+            if elem.childs.is_empty() {
+                return Err(Error::InvalidFlexChildNum(elem.src_pos))
             }
 
             attr!("flex = flex.must_fill_main_axis(", b"must_fill_main_axis", ");\n");
@@ -587,17 +587,17 @@ impl DruidGenerator {
         if has_norm_style || has_pseudo_style {
             fn parse_time(v:&str) -> u64 {
                 let v = v.to_lowercase();
-                if v.ends_with("s") {
-                    u64::from_str_radix( &v[..v.len()-1], 10 ).unwrap_or(0) * 1000_000_000
+                if v.ends_with('s') {
+                    u64::from_str_radix( &v[..v.len()-1], 10 ).unwrap_or(0) * 1_000_000_000
                 } else if v.ends_with("ms") {
-                    u64::from_str_radix( &v[..v.len()-2], 10 ).unwrap_or(0) * 1000_000
+                    u64::from_str_radix( &v[..v.len()-2], 10 ).unwrap_or(0) * 1_000_000
                 } else {
-                    u64::from_str_radix( v.as_str(), 10 ).unwrap() * 1000_000
+                    u64::from_str_radix( v.as_str(), 10 ).unwrap() * 1_000_000
                 }
             }
 
             fn transition_option(define:&str, item:&str) -> String {
-                for n in define.split(",") {
+                for n in define.split(',') {
                     let mut duration = 0;
                     let mut delay = 0;
                     let mut timing_function = Cow::Borrowed("druid_xml::simple_style::TimingFunction::Linear");
@@ -662,13 +662,13 @@ impl DruidGenerator {
                             cb.push_str("p2:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
                             cb.push_str("p3:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
                             cb.push_str("p4:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
-                            cb.push_str("}");
+                            cb.push('}');
                             Cow::Owned(cb)
                         } else if expect_tf.starts_with("steps(") {
                             let mut params = expect_tf["steps(".len() .. expect_tf.rfind(')').unwrap_or(expect_tf.len()-1)].split(',');
                             let mut cb = "druid_xml::simple_style::TimingFunction::Steps{".to_string();
                             cb.push_str("n:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
-                            let jumpterm = match params.next().unwrap_or("jump-start") {
+                            let _jumpterm = match params.next().unwrap_or("jump-start") {
                                 "jump-start" => "druid_xml::simple_style::JumpTerm::JumpStart",
                                 "jump-end" => "druid_xml::simple_style::JumpTerm::JumpEnd",
                                 "jump-none" => "druid_xml::simple_style::JumpTerm::JumpNone",
@@ -678,7 +678,7 @@ impl DruidGenerator {
                                 _ => "druid_xml::simple_style::JumpTerm::JumpStart"
                             };
                             cb.push_str("jumpterm:"); params.next().unwrap_or("0"); cb.push_str("f64, ");
-                            cb.push_str("}");
+                            cb.push('}');
                             Cow::Owned(cb)
                         } else {
                             Cow::Borrowed("druid_xml::simple_style::TimingFunction::Linear")
@@ -686,7 +686,7 @@ impl DruidGenerator {
                     };
                     return format!("Some(druid_xml::simple_style::AnimationState::from( druid_xml::simple_style::Animation{{ delay: {delay}, direction: druid_xml::simple_style::Direction::Normal, duration: {duration}, iteration: 1., name: 1., timing_function: {timing_function}, fill_mode: 0. }} ))");
                 }
-                return "None".to_string()
+                "None".to_string()
             }
 
             src!("let mut normal_style = \n");
@@ -771,7 +771,7 @@ impl DruidGenerator {
             }
 
             //fill 'None' 
-            for i in pseudo_count .. 4 {
+            for _i in pseudo_count .. 4 {
                 src!("None,\n");
             }
             src!("];\n");
@@ -837,7 +837,7 @@ impl SourceGenerator for DruidGenerator {
     }
 
     fn write(&mut self, elem_map:&HashMap<String,Element>, elem:&Element, css:&StyleSheet, wrappers:&HashMap<String,String>) -> Result<(),Error> {
-        self.impl_write(None,elem_map, &mut vec![], elem, css, wrappers)
+        self.impl_write(None,elem_map, &mut [], elem, css, wrappers)
     }
 }
 
@@ -873,12 +873,10 @@ impl CSSAttribute {
             write!(w,"druid::Color::rgba8({})", &tv[tv.find('(').unwrap()+1 .. tv.rfind(')').unwrap()]).unwrap();
         } else if tv.starts_with("rgb") && tv.ends_with(')') {
             write!(w,"druid::Color::rgb8({})", &tv[tv.find('(').unwrap()+1 .. tv.rfind(')').unwrap()]).unwrap();
+        } else if let Some(rgba) = named_color::named_color(v) {
+            write!(w,"{}", rgba).unwrap();
         } else {
-            if let Some(rgba) = named_color::named_color(v) {
-                write!(w,"{}", rgba).unwrap();
-            } else {
-                return Err(Error::InvalidAttributeValue((0, "invalid color value")))
-            }
+            return Err(Error::InvalidAttributeValue((0, "invalid color value")))
         }
         Ok(())
     }
@@ -888,7 +886,7 @@ impl CSSAttribute {
         match tv.as_bytes() {
             [val @ .. , b'p', b'x'] => write!(w,"{}f64", String::from_utf8_lossy(val) ).unwrap(),
             [val @ .. , b'e', b'm'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
-            val @ _ => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
+            val => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
         }
         Ok(())
     }
@@ -908,7 +906,7 @@ impl CSSAttribute {
             [val @ .. , b'e', b'm'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap() ).unwrap(),
             [val @ .. , b'p', b't'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap() ).unwrap() ,
             [val @ .. , b'%'] => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap() ).unwrap(),
-            val @ _ => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
+            val => write!(w, "{}f64", String::from_utf8_lossy(val).parse::<f64>().unwrap() ).unwrap()
         }
         Ok(())
     }

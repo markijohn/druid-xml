@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use druid::kurbo::Line;
+
 use druid::{Widget,WidgetExt,TextAlignment,Color};
 use druid::widget::*;
 use quick_xml::{Reader, events::Event};
@@ -84,7 +84,7 @@ pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
 						if let Some(elem) = crate::parse_element(pos, Some(Event::Start(e)), &mut reader )? {
                             let fnname = elem.attributes( None ).get_as_result::<String>("fn")?;
                             last_widget = Some(fnname.clone());
-                            if fnname.find("main").is_some() {
+                            if fnname.contains("main") {
                                 expected_main_widget = Some(fnname);
                             }
                             elem_map.insert( elem.attributes( None ).get_as_result::<String>("fn")?, elem);
@@ -111,7 +111,7 @@ pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
 
     let widget = if let Some(main) = expected_main_widget.and( last_widget ) {
         if let Some(elem ) = elem_map.get(&main) {
-            build_widget(None, &elem_map, &[], &elem, &style)?
+            build_widget(None, &elem_map, &[], elem, &style)?
         } else {
             Label::new(format!("Can't find main widget : {}", main) ).boxed()
         }
@@ -123,8 +123,8 @@ pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
 	Ok( widget )
 }
 
-fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<Box<dyn Widget<()>>,Error> {
-    let depth = parent_stack.len();
+fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<Box<dyn Widget<()>>,Error> {
+    let _depth = parent_stack.len();
     let elem_query = ElementQueryWrap { parent_stack, elem };
 
     //just simplify ordered iteration without vec allocation (#id query first)
@@ -258,7 +258,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
                     [val @ .. , b'e', b'm'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap_or(13.333f64),
                     [val @ .. , b'p', b't'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap_or(13.333f64),
                     [val @ .. , b'%'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap_or(13.333f64),
-                    val @ _ => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
+                    val => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
                 };
                 $widget.with_text_size( font_size )
             } else {
@@ -320,7 +320,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         } }
     }
 
-    let mut text = elem.text.as_ref().map( |e| String::from_utf8_lossy(&e) ).unwrap_or( std::borrow::Cow::Borrowed("") );
+    let mut text = elem.text.as_ref().map( |e| String::from_utf8_lossy(e) ).unwrap_or( std::borrow::Cow::Borrowed("") );
 
     if text.starts_with("${") && text.ends_with('}') {
         let key = text[2..text.len()-1].trim();
@@ -374,14 +374,14 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
             };
 
             if pseudo.is_some() {
-                has_pseudo_style = rule.declarations.iter().find( |e| e.name == "padding" ).is_some()
-                | rule.declarations.iter().find( |e| e.name == "margin" ).is_some()
-                | rule.declarations.iter().find( |e| e.name == "font-size" ).is_some()
-                | rule.declarations.iter().find( |e| e.name == "width" ).is_some()
-                | rule.declarations.iter().find( |e| e.name == "height" ).is_some()
-                | rule.declarations.iter().find( |e| e.name == "color" ).is_some()
-                | rule.declarations.iter().find( |e| e.name == "background-color" ).is_some()
-                | rule.declarations.iter().find( |e| e.name == "border" ).is_some();
+                has_pseudo_style = rule.declarations.iter().any(|e| e.name == "padding")
+                | rule.declarations.iter().any(|e| e.name == "margin")
+                | rule.declarations.iter().any(|e| e.name == "font-size")
+                | rule.declarations.iter().any(|e| e.name == "width")
+                | rule.declarations.iter().any(|e| e.name == "height")
+                | rule.declarations.iter().any(|e| e.name == "color")
+                | rule.declarations.iter().any(|e| e.name == "background-color")
+                | rule.declarations.iter().any(|e| e.name == "border");
                 if has_pseudo_style {
                     break
                 }
@@ -398,7 +398,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
         } else {
             druid::widget::Flex::row()
         };
-        if elem.childs.len() < 1 {
+        if elem.childs.is_empty() {
             return Err(Error::InvalidFlexChildNum(elem.src_pos))
         }
 
@@ -561,7 +561,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     else if tag == "slider" {
         let min = attrs.get_as_result::<f64>("min").unwrap_or(0f64);
         let max = attrs.get_as_result::<f64>("max").unwrap_or(1f64);
-        let mut slider = Slider::new();
+        let slider = Slider::new();
         slider.with_range(min,max).lens( DummyLens::<(),f64>::new(0f64) ).boxed()
     }
 
@@ -646,17 +646,13 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     //     Container::new( child ).boxed()
     // }
 
-    else {
-        if tag == "demo_custom_widget" {
-            ex_custom_widget::CustomWidget{}.boxed()
-        } else {
-            if let Some(elem) = parsed_map.get( tag.as_ref() ) {
-                let new_stack = new_parent_stack!();
-                build_widget(Some(&attrs), parsed_map, &new_stack, elem, css)?
-            } else {
-                return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
-            }
-        }
+    else if tag == "demo_custom_widget" {
+        ex_custom_widget::CustomWidget{}.boxed()
+    } else if let Some(elem) = parsed_map.get( tag.as_ref() ) {
+        let new_stack = new_parent_stack!();
+        build_widget(Some(&attrs), parsed_map, &new_stack, elem, css)?
+    } else {
+        return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
     };
 
     
@@ -700,23 +696,19 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
     if has_norm_style || has_pseudo_style {
         fn parse_time(v:&str) -> u64 {
             let v = v.to_lowercase();
-            if v.ends_with("s") {
-                u64::from_str_radix( &v[..v.len()-1], 10 ).unwrap_or(0) * 1000_000_000
+            if v.ends_with('s') {
+                u64::from_str_radix( &v[..v.len()-1], 10 ).unwrap_or(0) * 1_000_000_000
             } else if v.ends_with("ms") {
-                u64::from_str_radix( &v[..v.len()-2], 10 ).unwrap_or(0) * 1000_000
+                u64::from_str_radix( &v[..v.len()-2], 10 ).unwrap_or(0) * 1_000_000
             } else {
-                u64::from_str_radix( v.as_str(), 10 ).unwrap() * 1000_000
+                u64::from_str_radix( v.as_str(), 10 ).unwrap() * 1_000_000
             }
         }
 
         fn transition_option(define:Option<&str>, item:&str) -> Option<AnimationState> {
-            let define = if let Some(v) = define {
-                v
-            } else {
-                return None
-            };
+            let define = define?;
 
-            for n in define.split(",") {
+            for n in define.split(',') {
                 let mut duration = 0;
                 let mut delay = 0;
                 let mut timing_function = crate::simple_style::TimingFunction::Linear;
@@ -802,7 +794,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
                 };
                 return Some(crate::simple_style::AnimationState::from( crate::simple_style::Animation{ delay:delay as _, direction: crate::simple_style::Direction::Normal, duration:duration as _, iteration: 1., name: 1., timing_function, fill_mode: 0. } ));
             }
-            return None
+            None
         }
 
         
@@ -841,7 +833,7 @@ fn build_widget<'a>(parameter:Option<&AttributesWrapper<'a>>,parsed_map:&HashMap
                         [val @ .. , b'e', b'm'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 0.0625).unwrap_or(13.333f64),
                         [val @ .. , b'p', b't'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v * 1.333).unwrap_or(13.333f64),
                         [val @ .. , b'%'] => String::from_utf8_lossy(val).parse::<f64>().map( |v| v / 100f64 / 0.0625 ).unwrap_or(13.333f64),
-                        val @ _ => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
+                        val => String::from_utf8_lossy(val).parse::<f64>().unwrap_or(13.333f64)
                     };
                     font_size
                 } )

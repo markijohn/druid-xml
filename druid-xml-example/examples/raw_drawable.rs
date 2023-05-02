@@ -1,15 +1,15 @@
 use std::str::FromStr;
 
-use druid::kurbo::Ellipse;
-use druid::piet::StrokeStyle;
+
+
 use druid::widget::Flex;
 use druid::{AppLauncher, WindowDesc, widget::Label};
-use druid::{WidgetExt, Color, Vec2};
+use druid::{WidgetExt, Color};
 use druid_xml::qwidget::drawable::*;
 use druid_xml::simple_style::BorderStyle;
 
 fn main() {
-	let border_color = Color::rgb8(64,64,64);
+	let _border_color = Color::rgb8(64,64,64);
 	let col_red = Color::rgb8(128,0,0);
 	let col_blue = Color::rgb8(0,0,128);
 	let col_white = Color::rgb8(255,255,255);
