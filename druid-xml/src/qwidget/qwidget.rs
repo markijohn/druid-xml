@@ -1,6 +1,6 @@
 use std::{borrow::{Cow, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref}, collections::HashSet, collections::HashMap};
 
-use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size, WidgetPod};
+use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size, WidgetPod, widget::Axis};
 use serde_json::Value;
 use simplecss::{Selector, Element};
 
@@ -177,24 +177,6 @@ impl Widget<JSValue> for QWidget {
         let qraw = unsafe { &mut *self.0.get() };
         let origin = &mut qraw.origin;
         origin.layout(ctx,bc,data,env)
-
-        // let padding = qraw.padding;
-        // let hpad = padding.x0 + padding.x1;
-        // let vpad = padding.y0 + padding.y1;
-
-        // let child_bc = bc.shrink((hpad, vpad));
-        // let size = origin.layout(ctx, &child_bc, data, env);
-        // let origin_point = Point::new(padding.x0, padding.y0);
-        // origin.set_origin(ctx, origin_point);
-
-        // let my_size = Size::new(size.width + hpad, size.height + vpad);
-        // let my_insets = origin.compute_parent_paint_insets(my_size);
-        // ctx.set_paint_insets(my_insets);
-        // let baseline_offset = origin.baseline_offset();
-        // if baseline_offset > 0f64 {
-        //     ctx.set_baseline_offset(baseline_offset + padding.y1);
-        // }
-        // my_size
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &JSValue, env: &Env) {
@@ -203,23 +185,17 @@ impl Widget<JSValue> for QWidget {
         origin.paint(ctx, data, env);
     }
 
-    // fn compute_max_intrinsic(
-    //     &mut self,
-    //     axis: Axis,
-    //     ctx: &mut LayoutCtx,
-    //     bc: &BoxConstraints,
-    //     data: &JSValue,
-    //     env: &Env,
-    // ) -> f64 {
-    //     let qraw = unsafe { (&mut *self.0.get()) };
-    //     let origin = &mut qraw.origin;
-    //     let padding = qraw.padding.size();
-    //     let child_bc = bc.shrink(padding);
-    //     let child_max_intrinsic_width = origin
-    //         .widget_mut()
-    //         .compute_max_intrinsic(axis, ctx, &child_bc, data, env);
-    //     child_max_intrinsic_width + axis.major(padding)
-    // }
+    fn compute_max_intrinsic(
+        &mut self,
+        axis: Axis,
+        ctx: &mut LayoutCtx,
+        bc: &BoxConstraints,
+        data: &JSValue,
+        env: &Env,
+    ) -> f64 {
+        let origin = unsafe { &mut (*self.0.get()).origin };
+        origin.widget_mut().compute_max_intrinsic(axis, ctx, bc, data, env)
+    }
     
     fn id(&self) -> Option<WidgetId> {
         let origin = unsafe { &mut (*self.0.get()).origin };

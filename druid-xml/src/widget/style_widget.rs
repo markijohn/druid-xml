@@ -108,7 +108,6 @@ fn wrapped_padding_env(env:&Env, style_updated:u64, style:&Style) -> Env {
 
 impl<T:Data, W:Widget<T>> Widget<T> for SimpleStyleWidget<T,W> {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env) {
-		
 		let is_inner = self.inner_size.contains(self.last_point);
 		if is_inner {
 			//Do not call WidgetPod.event
