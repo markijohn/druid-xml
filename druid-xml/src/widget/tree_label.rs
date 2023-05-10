@@ -28,7 +28,7 @@ use druid::widget::prelude::*;
 use druid::widget::{Padding, Scroll, WidgetWrapper};
 use druid::{
     theme, ArcStr, Color, Command, FontDescriptor, HotKey, KeyEvent, KeyOrValue, Point, Rect,
-    SysMods, TextAlignment, TimerToken, Vec2,
+    SysMods, TextAlignment, TimerToken, Vec2, KbKey,
 };
 
 use druid::widget::LabelText;
@@ -56,8 +56,6 @@ const SCROLL_TO_INSETS: Insets = Insets::uniform_xy(40.0, 0.0);
 /// [`Formatter`]: crate::text::Formatter
 /// [`ValueTextBox`]: super::ValueTextBox
 pub struct TreeLabel<T> {
-    placeholder_text: LabelText<T>,
-    placeholder_layout: TextLayout<ArcStr>,
     inner: Scroll<T, Padding<T, TextComponent<T>>>,
     scroll_to_selection_after_layout: bool,
     multiline: bool,
@@ -96,22 +94,15 @@ impl<T: EditableText + TextStorage> TreeLabel<T> {
     ///     .lens(AppState::name);
     /// ```
     pub fn new() -> Self {
-        let placeholder_text = ArcStr::from("");
-        let mut placeholder_layout = TextLayout::new();
-        placeholder_layout.set_text_color(theme::PLACEHOLDER_COLOR);
-        placeholder_layout.set_text(placeholder_text.clone());
-
         let mut scroll = Scroll::new(Padding::new(
             theme::TEXTBOX_INSETS,
             TextComponent::default(),
         ))
         .content_must_fill(true);
-        scroll.set_enabled_scrollbars(druid::scroll_component::ScrollbarsEnabled::None);
+        scroll.set_enabled_scrollbars(druid::scroll_component::ScrollbarsEnabled::Horizontal);
         Self {
             inner: scroll,
             scroll_to_selection_after_layout: false,
-            placeholder_text: placeholder_text.into(),
-            placeholder_layout,
             multiline: false,
             was_focused_from_click: false,
             cursor_on: false,
@@ -352,7 +343,6 @@ impl<T> TreeLabel<T> {
             .borrow_mut()
             .layout
             .set_text_size(size.clone());
-        self.placeholder_layout.set_text_size(size);
     }
 
     /// Set the font.
@@ -368,7 +358,6 @@ impl<T> TreeLabel<T> {
         }
         let font = font.into();
         self.text_mut().borrow_mut().layout.set_font(font.clone());
-        self.placeholder_layout.set_font(font);
     }
 
     /// Set the [`TextAlignment`] for this `TextBox``.
@@ -422,21 +411,6 @@ impl<T> TreeLabel<T> {
     /// This is not valid until `layout` has been called.
     pub fn text_position(&self) -> Point {
         self.text_pos
-    }
-}
-
-impl<T: Data> TreeLabel<T> {
-    /// Builder-style method to set the `TextBox`'s placeholder text.
-    pub fn with_placeholder(mut self, placeholder: impl Into<LabelText<T>>) -> Self {
-        self.set_placeholder(placeholder);
-        self
-    }
-
-    /// Set the `TextBox`'s placeholder text.
-    pub fn set_placeholder(&mut self, placeholder: impl Into<LabelText<T>>) {
-        self.placeholder_text = placeholder.into();
-        self.placeholder_layout
-            .set_text(self.placeholder_text.display_text());
     }
 }
 
@@ -496,6 +470,16 @@ impl<T: TextStorage + EditableText> TreeLabel<T> {
         }
     }
 
+    fn scroll_to_selection_end_as_layout(&mut self, ctx: &mut LayoutCtx) {
+        let rect = self.rect_for_selection_end();
+        let view_rect = self.inner.viewport_rect();
+        let is_visible =
+            view_rect.contains(rect.origin()) && view_rect.contains(Point::new(rect.x1, rect.y1));
+        if !is_visible {
+            self.inner.scroll_to(ctx, rect + SCROLL_TO_INSETS);
+        }
+    }
+
     /// These commands may be supplied by menus; but if they aren't, we
     /// inject them again, here.
     fn fallback_do_builtin_command(
@@ -505,6 +489,7 @@ impl<T: TextStorage + EditableText> TreeLabel<T> {
     ) -> Option<Command> {
         use druid::commands as sys;
         let our_id = ctx.widget_id();
+        
         match key {
             key if HotKey::new(SysMods::Cmd, "c").matches(key) => Some(sys::COPY.to(our_id)),
             key if HotKey::new(SysMods::Cmd, "x").matches(key) => Some(sys::CUT.to(our_id)),
@@ -560,12 +545,19 @@ impl<T: TextStorage + EditableText> Widget<T> for TreeLabel<T> {
                 _ => (),
             },
             Event::KeyDown(key) if !self.text().is_composing() => {
-                if let Some(cmd) = self.fallback_do_builtin_command(ctx, key) {
-                    ctx.submit_command(cmd);
+                if HotKey::new(None, KbKey::Escape).matches( key ) {
+                    ctx.resign_focus();
+                    ctx.request_paint();
                     ctx.set_handled();
+                } else {
+                    if let Some(cmd) = self.fallback_do_builtin_command(ctx, key) {
+                        ctx.submit_command(cmd);
+                        ctx.set_handled();
+                    }
                 }
+                
             }
-            Event::MouseDown(mouse) if self.text().can_write() => {
+            Event::MouseUp(mouse) if self.text().can_write() => {
                 if !ctx.is_disabled() {
                     if !mouse.focus {
                         ctx.request_focus();
@@ -647,9 +639,6 @@ impl<T: TextStorage + EditableText> Widget<T> for TreeLabel<T> {
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
         match event {
             LifeCycle::WidgetAdded => {
-                if matches!(event, LifeCycle::WidgetAdded) {
-                    self.placeholder_text.resolve(data, env);
-                }
                 ctx.register_text_input(self.text().input_handler());
             }
             LifeCycle::BuildFocusChain => {
@@ -690,15 +679,8 @@ impl<T: TextStorage + EditableText> Widget<T> for TreeLabel<T> {
 
     // #[instrument(name = "TextBox", level = "trace", skip(self, ctx, old, data, env))]
     fn update(&mut self, ctx: &mut UpdateCtx, old: &T, data: &T, env: &Env) {
-        let placeholder_changed = self.placeholder_text.resolve(data, env);
-        if placeholder_changed {
-            let new_text = self.placeholder_text.display_text();
-            self.placeholder_layout.set_text(new_text);
-        }
-
         self.inner.update(ctx, old, data, env);
-        if placeholder_changed
-            || (ctx.env_changed() && self.placeholder_layout.needs_rebuild_after_update(ctx))
+        if ctx.env_changed()
         {
             ctx.request_layout();
         }
@@ -718,17 +700,12 @@ impl<T: TextStorage + EditableText> Widget<T> for TreeLabel<T> {
         let min_width = env.get(theme::WIDE_WIDGET_WIDTH);
         let textbox_insets = env.get(theme::TEXTBOX_INSETS);
 
-        self.placeholder_layout.rebuild_if_needed(ctx.text(), env);
         let min_size = bc.constrain((min_width, 0.0));
         let child_bc = BoxConstraints::new(min_size, bc.max());
 
         let size = self.inner.layout(ctx, &child_bc, data, env);
 
-        let text_metrics = if !self.text().can_read() || data.is_empty() {
-            self.placeholder_layout.layout_metrics()
-        } else {
-            self.text().borrow().layout.layout_metrics()
-        };
+        let text_metrics = self.text().borrow().layout.layout_metrics();
 
         let layout_baseline = text_metrics.size.height - text_metrics.first_baseline;
         let baseline_off = layout_baseline
@@ -736,7 +713,7 @@ impl<T: TextStorage + EditableText> Widget<T> for TreeLabel<T> {
             + textbox_insets.y1;
         ctx.set_baseline_offset(baseline_off);
         if self.scroll_to_selection_after_layout {
-            self.scroll_to_selection_end(ctx);
+            self.scroll_to_selection_end_as_layout(ctx);
             self.scroll_to_selection_after_layout = false;
         }
 
@@ -776,26 +753,7 @@ impl<T: TextStorage + EditableText> Widget<T> for TreeLabel<T> {
 
         ctx.fill(clip_rect, &background_color);
 
-        if !data.is_empty() {
-            self.inner.paint(ctx, data, env);
-        } else {
-            let text_width = self.placeholder_layout.layout_metrics().size.width;
-            let extra_width = (size.width - text_width - textbox_insets.x_value()).max(0.);
-            let alignment = self.text().borrow().text_alignment();
-            // alignment is only used for single-line text boxes
-            let x_offset = if self.multiline {
-                0.0
-            } else {
-                x_offset_for_extra_width(alignment, extra_width)
-            };
-
-            // clip when we draw the placeholder, since it isn't in a clipbox
-            ctx.with_save(|ctx| {
-                ctx.clip(clip_rect);
-                self.placeholder_layout
-                    .draw(ctx, (textbox_insets.x0 + x_offset, textbox_insets.y0));
-            })
-        }
+        self.inner.paint(ctx, data, env);
 
         // Paint the cursor if focused and there's no selection
         if is_focused && self.should_draw_cursor() {
