@@ -691,7 +691,7 @@ mod test {
 
     #[test]
     fn calc_test() {
-        let anim = Animation { delay: 0., direction: Direction::Alternate, duration: 2000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 1. };
+        let anim = Animation { delay: 0, direction: Direction::Alternate, duration: 2000_000_000, iteration: 1., name: 1., timing_function: TimingFunction::Linear, fill_mode: 1. };
         let anim_state = AnimationState::from( anim );
         let mut styler = Styler {
             padding: ( Some( Insets { x0: 10., y0: 10., x1: 20., y1: 20. } ), Some(anim_state.clone()) ),
