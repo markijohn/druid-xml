@@ -52,27 +52,45 @@ impl <'a> QWidgetContext<'a> {
 }
 
 
-pub trait Queryable<'a> {
-    fn find(&self, q:&str) -> QueryChain<'a>;
-    fn q(&self, q:&str) -> QueryChain<'a>;
-    fn root(&self) -> QueryChain<'a>;
+pub trait Queryable {
+    fn find(&self, q:&str) -> QueryChain;
+    fn q(&self, q:&str) -> QueryChain;
+    fn root(&self) -> QueryChain;
 }
 
 #[derive(Clone)]
-pub struct QWidget<'a>(Rc<UnsafeCell<QWidgetRaw<'a>>>);
+pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
 
-///! Queriable widget
-struct QWidgetRaw<'a> {
-    localname : &'a str,
-    classes : Vec<&'a str>,
-    parent : Option< QWidget<'a> >,
-    origin : WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
-    attribute : HashMap<Cow<'static,str>, JSValue>,
-    childs : Vec< QWidget<'a> >
+impl QWidget {
+    pub fn get_pod(&self) -> &WidgetPod<JSValue, Box<dyn Widget<JSValue>>> {
+        unsafe {
+            &(*self.0.get()).origin
+        }
+    }
+
+    pub fn get_mut_pod(&self) -> &mut WidgetPod<JSValue, Box<dyn Widget<JSValue>>> {
+        unsafe {
+            &mut (*self.0.get()).origin
+        }
+    }
+
+    pub fn widget_mut(&self) -> &mut dyn Widget<JSValue> {
+        unsafe {
+            (*self.0.get()).origin.widget_mut()
+        }
+    }
 }
 
+///! Queriable widget
+struct QWidgetRaw {
+    localname : Rc<String>,
+    classes : Vec<Rc<String>>,
+    parent : Option< QWidget>,
+    origin : WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
+    attribute : HashMap<Cow<'static,str>, JSValue>,
+}
 
-impl <'a> Element for QWidget<'a> {
+impl Element for QWidget {
     fn parent_element(&self) -> Option<Self> {
         unsafe { (*self.0.get()).parent.clone() }
     }
@@ -80,7 +98,7 @@ impl <'a> Element for QWidget<'a> {
     fn prev_sibling_element(&self) -> Option<Self> {
         unsafe { 
             if let Some(parent) = (*self.0.get()).parent.as_ref() {
-                if let Some(find) = (*parent.0.get()).childs.iter().skip(1).enumerate().find( |(_i,e)| Rc::ptr_eq(&e.0, &self.0)) { //e.0.get() == self.0.get() ) {
+                if let Some(find) = (*parent.0.get()).get_childs().iter().skip(1).enumerate().find( |(_i,e)| Rc::ptr_eq(&e.0, &self.0)) { //e.0.get() == self.0.get() ) {
                     return Some( (*parent.0.get()).childs[find.0].clone() )
                 }
             }
@@ -89,7 +107,7 @@ impl <'a> Element for QWidget<'a> {
     }
 
     fn has_local_name(&self, name: &str) -> bool {
-        unsafe { (*self.0.get()).localname == name }
+        unsafe { (*self.0.get()).localname.as_str() == name }
     }
 
     fn attribute_matches(&self, local_name: &str, operator: simplecss::AttributeOperator) -> bool {
@@ -115,22 +133,23 @@ impl <'a> Element for QWidget<'a> {
     }
 
     fn pseudo_class_matches(&self, _class: simplecss::PseudoClass) -> bool {
-        todo!()
+        //todo!()
+        false
     }
 }
 
-impl <'a> Queryable<'a> for QWidget<'a> {
-    fn find(&self, _q:&str) -> QueryChain<'a> {
+impl Queryable for QWidget {
+    fn find(&self, _q:&str) -> QueryChain {
         //find in self
         QueryChain ( vec![ QWidget(self.0.clone()) ] )
     }
 
-    fn q(&self, q:&str) -> QueryChain<'a> {
+    fn q(&self, q:&str) -> QueryChain {
         //find in root
         QueryChain ( vec![ QWidget(self.0.clone()) ] ).q( q )
     }
 
-    fn root(&self) -> QueryChain<'a> {
+    fn root(&self) -> QueryChain {
         let mut parent = self.0.clone();
         
         loop {
@@ -144,7 +163,7 @@ impl <'a> Queryable<'a> for QWidget<'a> {
     }
 }
 
-impl <'a> Widget<JSValue> for QWidget<'a> {
+impl Widget<JSValue> for QWidget {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut JSValue, env: &Env) {
         let origin = unsafe { &mut (*self.0.get()).origin };
         origin.event(ctx, event, data, env);
@@ -203,16 +222,16 @@ impl <'a> Widget<JSValue> for QWidget<'a> {
     }
 }
 
-pub struct QueryChain<'a>(Vec<QWidget<'a>>);
+pub struct QueryChain(Vec<QWidget>);
 
-impl <'a> From<Vec<QWidget<'a>>> for QueryChain<'a> {
-    fn from(value: Vec<QWidget<'a>>) -> Self {
+impl From<Vec<QWidget>> for QueryChain {
+    fn from(value: Vec<QWidget>) -> Self {
         Self(value)
     }
 }
 
-impl <'a> Deref for QueryChain<'a> {
-    type Target = [QWidget<'a>];
+impl Deref for QueryChain {
+    type Target = [QWidget];
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
@@ -220,8 +239,8 @@ impl <'a> Deref for QueryChain<'a> {
 }
 
 
-impl <'a> QueryChain<'a> {
-    pub fn q(&self, q:&str) -> QueryChain<'a> {
+impl QueryChain {
+    pub fn q(&self, q:&str) -> QueryChain {
         let mut chain = vec![];
         self.iter().for_each(|e| {
             chain.extend( e.q(q).iter().cloned() );

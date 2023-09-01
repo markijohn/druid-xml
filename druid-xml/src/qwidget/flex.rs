@@ -16,6 +16,7 @@
 
 use std::ops::Add;
 
+use crate::qwidget::qwidget::*;
 use druid::debug_state::DebugState;
 use druid::kurbo::{common::FloatExt, Vec2};
 use druid::widget::prelude::*;
@@ -96,7 +97,7 @@ use super::value::JSValue;
 /// axis than is taken up by its children.
 ///
 /// - [`must_fill_main_axis`] determines whether the container is obliged to
-/// be maximally large on the major axis, as determined by its own constraints.
+/// be maximally large on the major axis, as determin ed by its own constraints.
 /// If this is `true`, then the container must fill the available space on that
 /// axis; otherwise it may be smaller if its children are smaller.
 ///
@@ -444,7 +445,8 @@ impl Flex {
     /// Builder-style variant of `add_child`.
     ///
     /// Convenient for assembling a group of widgets in a single expression.
-    pub fn with_child(mut self, child: impl Widget<JSValue> + 'static) -> Self {
+    // pub fn with_child(mut self, child: impl Widget<JSValue> + 'static) -> Self {
+    pub fn with_child(mut self, child: QWidget) -> Self {
         self.add_child(child);
         self
     }
@@ -477,7 +479,8 @@ impl Flex {
     /// [`CrossAxisAlignment`]: enum.CrossAxisAlignment.html
     pub fn with_flex_child(
         mut self,
-        child: impl Widget<JSValue> + 'static,
+        //child: impl Widget<JSValue> + 'static,
+        child : QWidget,
         params: impl Into<FlexParams>,
     ) -> Self {
         self.add_flex_child(child, params);
@@ -535,9 +538,10 @@ impl Flex {
     /// See also [`with_child`].
     ///
     /// [`with_child`]: Flex::with_child
-    pub fn add_child(&mut self, child: impl Widget<JSValue> + 'static) {
+    // pub fn add_child(&mut self, child: impl Widget<JSValue> + 'static) {
+    pub fn add_child(&mut self, child: QWidget) {
         let child = Child::Fixed {
-            widget: WidgetPod::new(Box::new(child)),
+            widget: child,//WidgetPod::new(Box::new(child)),
             alignment: None,
         };
         self.children.push(child);
@@ -569,20 +573,21 @@ impl Flex {
     /// [`with_flex_child`]: Flex::with_flex_child
     pub fn add_flex_child(
         &mut self,
-        child: impl Widget<JSValue> + 'static,
+        // child: impl Widget<JSValue> + 'static,
+        child: QWidget,
         params: impl Into<FlexParams>,
     ) {
         let params = params.into();
         let child = if params.flex > 0.0 {
             Child::Flex {
-                widget: WidgetPod::new(Box::new(child)),
+                widget: child,//WidgetPod::new(Box::new(child)),
                 alignment: params.alignment,
                 flex: params.flex,
             }
         } else {
             //tracing::warn!("Flex value should be > 0.0. To add a non-flex child use the add_child or with_child methods.\nSee the docs for more information: https://docs.rs/druid/0.8.0/druid/widget/struct.Flex.html");
             Child::Fixed {
-                widget: WidgetPod::new(Box::new(child)),
+                widget: child, //WidgetPod::new(Box::new(child)),
                 alignment: None,
             }
         };
@@ -658,7 +663,8 @@ impl Widget<JSValue> for Flex {
         for child in self.children.iter_mut() {
             match child {
                 Child::Fixed { widget, .. } | Child::Flex { widget, .. } => {
-                    widget.update(ctx, data, env)
+                    // widget.update(ctx, data, env)
+                    widget.update(ctx, _old_data, data, env)
                 }
                 Child::FixedSpacer(key_or_val, _) if ctx.env_key_changed(key_or_val) => {
                     ctx.request_layout()
@@ -695,11 +701,13 @@ impl Widget<JSValue> for Flex {
                 Child::Fixed { widget, alignment } => {
                     // The BoxConstrains of fixed-children only depends on the BoxConstrains of the
                     // Flex widget.
-                    let child_size = if bc_changed || widget.layout_requested() {
+                    //let child_size = if bc_changed || widget.layout_requested() {
+                    let pod = widget.get_pod();
+                    let child_size = if bc_changed || pod.layout_requested() {
                         let alignment = alignment.unwrap_or(self.cross_alignment);
                         any_use_baseline |= alignment == CrossAxisAlignment::Baseline;
 
-                        let old_size = widget.layout_rect().size();
+                        let old_size = pod.layout_rect().size();
                         let child_bc =
                             self.direction
                                 .constraints(&loosened_bc, 0.0, std::f64::INFINITY);
@@ -719,10 +727,10 @@ impl Widget<JSValue> for Flex {
 
                         child_size
                     } else {
-                        widget.layout_rect().size()
+                        pod.layout_rect().size()
                     };
 
-                    let baseline_offset = widget.baseline_offset();
+                    let baseline_offset = pod.baseline_offset();
 
                     major_non_flex += self.direction.major(child_size).expand();
                     minor = minor.max(self.direction.minor(child_size).expand());
@@ -758,7 +766,9 @@ impl Widget<JSValue> for Flex {
                 } => {
                     // The BoxConstrains of flex-children depends on the size of every sibling, which
                     // received layout earlier. Therefore we use any_changed.
-                    let child_size = if any_changed || widget.layout_requested() {
+                    let pod = widget.get_pod();
+                    //let child_size = if any_changed || widget.layout_requested() {
+                    let child_size = if any_changed || pod.layout_requested() {
                         let alignment = alignment.unwrap_or(self.cross_alignment);
                         any_use_baseline |= alignment == CrossAxisAlignment::Baseline;
 
@@ -766,7 +776,7 @@ impl Widget<JSValue> for Flex {
                         let actual_major = desired_major.round();
                         remainder = desired_major - actual_major;
 
-                        let old_size = widget.layout_rect().size();
+                        let old_size = pod.layout_rect().size();
                         let child_bc = self.direction.constraints(&loosened_bc, 0.0, actual_major);
                         let child_size = widget.layout(ctx, &child_bc, data, env);
 
@@ -776,10 +786,10 @@ impl Widget<JSValue> for Flex {
 
                         child_size
                     } else {
-                        widget.layout_rect().size()
+                        pod.layout_rect().size()
                     };
 
-                    let baseline_offset = widget.baseline_offset();
+                    let baseline_offset = pod.baseline_offset();
 
                     major_flex += self.direction.major(child_size).expand();
                     minor = minor.max(self.direction.minor(child_size).expand());
@@ -826,7 +836,9 @@ impl Widget<JSValue> for Flex {
                 | Child::Flex {
                     widget, alignment, ..
                 } => {
-                    let child_size = widget.layout_rect().size();
+                    let pod = widget.get_pod();
+                    //let child_size = widget.layout_rect().size();
+                    let child_size = pod.layout_rect().size();
                     let alignment = alignment.unwrap_or(self.cross_alignment);
                     let child_minor_offset = match alignment {
                         // This will ignore baseline alignment if it is overridden on children,
@@ -834,7 +846,7 @@ impl Widget<JSValue> for Flex {
                         CrossAxisAlignment::Baseline
                             if matches!(self.direction, Axis::Horizontal) =>
                         {
-                            let child_baseline = widget.baseline_offset();
+                            let child_baseline = pod.baseline_offset();
                             let child_above_baseline = child_size.height - child_baseline;
                             extra_height + (max_above_baseline - child_above_baseline)
                         }
@@ -843,7 +855,7 @@ impl Widget<JSValue> for Flex {
                                 .direction
                                 .pack(self.direction.major(child_size), minor_dim)
                                 .into();
-                            if widget.layout_rect().size() != fill_size {
+                            if pod.layout_rect().size() != fill_size {
                                 let child_bc = BoxConstraints::tight(fill_size);
                                 //TODO: this is the second call of layout on the same child, which
                                 // is bad, because it can lead to exponential increase in layout calls
@@ -859,8 +871,8 @@ impl Widget<JSValue> for Flex {
                     };
 
                     let child_pos: Point = self.direction.pack(major, child_minor_offset).into();
-                    widget.set_origin(ctx, child_pos);
-                    child_paint_rect = child_paint_rect.union(widget.paint_rect());
+                    pod.set_origin(ctx, child_pos);
+                    child_paint_rect = child_paint_rect.union(pod.paint_rect());
                     major += self.direction.major(child_size).expand();
                     major += spacing.next().unwrap_or(0.);
                 }
@@ -1177,11 +1189,11 @@ impl From<f64> for FlexParams {
 
 enum Child {
     Fixed {
-        widget: WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
+        widget: QWidget,//WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
         alignment: Option<CrossAxisAlignment>,
     },
     Flex {
-        widget: WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
+        widget: QWidget,//WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
         alignment: Option<CrossAxisAlignment>,
         flex: f64,
     },
@@ -1192,13 +1204,15 @@ enum Child {
 impl Child {
     fn widget_mut(&mut self) -> Option<&mut WidgetPod<JSValue, Box<dyn Widget<JSValue>>>> {
         match self {
-            Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget),
+            //Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget),
+            Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget.get_mut_pod()),
             _ => None,
         }
     }
     fn widget(&self) -> Option<&WidgetPod<JSValue, Box<dyn Widget<JSValue>>>> {
         match self {
-            Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget),
+            //Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget),
+            Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget.get_pod()),
             _ => None,
         }
     }
