@@ -1,6 +1,6 @@
 use std::{borrow::{Cow, Borrow}, rc::Rc, cell::UnsafeCell, ops::{Deref}, collections::HashSet, collections::HashMap};
 
-use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size, WidgetPod, widget::Axis};
+use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, LayoutCtx, BoxConstraints, PaintCtx, WidgetId, Size, WidgetPod, widget::{Axis, WidgetWrapper}};
 use serde_json::Value;
 use simplecss::{Selector, Element};
 
@@ -58,6 +58,8 @@ pub trait Queryable {
     fn root(&self) -> QueryChain;
 }
 
+
+
 #[derive(Clone)]
 pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
 
@@ -81,12 +83,13 @@ impl QWidget {
     }
 }
 
+
 ///! Queriable widget
 struct QWidgetRaw {
     localname : Rc<String>,
     classes : Vec<Rc<String>>,
     parent : Option< QWidget>,
-    origin : WidgetPod<JSValue, Box<dyn Widget<JSValue>>>,
+    origin : WidgetPod<JSValue, WrapQWidget>,
     attribute : HashMap<Cow<'static,str>, JSValue>,
 }
 
