@@ -61,7 +61,7 @@ impl <D, W:Widget<D>> Widget<D> for LazyWrapperWidget<W,D> {
     }
 }
 
-pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
+pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<JSValue> >, Error > {
 	let mut style = StyleSheet::new();
 	let mut reader = Reader::from_str(xml);
     let mut elem_map = HashMap::new();
