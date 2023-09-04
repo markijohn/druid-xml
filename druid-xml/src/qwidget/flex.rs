@@ -24,6 +24,7 @@ use druid::{Data, KeyOrValue, Point, Rect, WidgetPod};
 use druid::{BoxConstraints, Size};
 
 use super::value::JSValue;
+use super::wrapper::WrapperQWidget;
 
 /// A container with either horizontal or vertical layout.
 ///
@@ -1202,14 +1203,14 @@ enum Child {
 }
 
 impl Child {
-    fn widget_mut(&mut self) -> Option<&mut WidgetPod<JSValue, Box<dyn Widget<JSValue>>>> {
+    fn widget_mut(&mut self) -> Option<&mut WidgetPod<JSValue, WrapperQWidget>> {
         match self {
             //Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget),
             Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget.get_mut_pod()),
             _ => None,
         }
     }
-    fn widget(&self) -> Option<&WidgetPod<JSValue, Box<dyn Widget<JSValue>>>> {
+    fn widget(&self) -> Option<&WidgetPod<JSValue, WrapperQWidget>> {
         match self {
             //Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget),
             Child::Fixed { widget, .. } | Child::Flex { widget, .. } => Some(widget.get_pod()),

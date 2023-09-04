@@ -7,7 +7,9 @@ use druid::widget::*;
 use quick_xml::{Reader, events::Event};
 use simplecss::{StyleSheet, Declaration, DeclarationTokenizer};
 
+use crate::qwidget::value::JSValue;
 use crate::simple_style::{AnimationState, Pseudo, BorderStyle};
+use crate::widget::DXTextBox;
 use crate::writer::{ElementQueryWrap, PseudoOrderTrapQueryWrap};
 use crate::{Element, Error, AttributeGetter, DummyLens, AttributesWrapper};
 
@@ -123,7 +125,7 @@ pub fn generate_widget(xml:&str) -> Result< Box<dyn Widget<()>>, Error > {
 	Ok( widget )
 }
 
-fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<Box<dyn Widget<()>>,Error> {
+fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<String,Element>, parent_stack:&[&Element], elem:&Element, css:&StyleSheet) -> Result<Box<dyn Widget<JSValue>>,Error> {
     let _depth = parent_stack.len();
     let elem_query = ElementQueryWrap { parent_stack, elem };
 
@@ -391,7 +393,7 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
 
     //TODO : Wrap EnvSetup
     //TODO : Bind event
-    let mut child:Box<dyn Widget<()>> = 
+    let mut child:Box<dyn Widget<JSValue>> = 
     if tag == "flex" {
         let mut flex = if let Some( Cow::Borrowed(b"column") ) = attrs.get(b"direction") {
             druid::widget::Flex::column()
@@ -512,9 +514,9 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
     else if tag == "textbox" || (tag == "input" && input_type == "text") {
         tag_wrap = "textbox";
         let mut textbox = if let Some(Cow::Borrowed(b"true")) = attrs.get(b"multiline") {
-            druid::widget::TextBox::multiline()
+            DXTextBox::multiline()
         } else {
-            druid::widget::TextBox::new()
+            DXTextBox::new()
         };
         textbox = style!(textbox, "color");
         textbox = style!(textbox, "font-size");
@@ -524,7 +526,8 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
             textbox.set_placeholder(placeholder);
         }
 
-        textbox.lens( DummyLens::<(),String>::new(String::new()) ).boxed()
+        //textbox.lens( DummyLens::<(),String>::new(String::new()) ).boxed()
+        textbox.boxed()
     }
 
     //WARN : "image" is none-standard

@@ -1,17 +1,26 @@
+use std::ops::{Deref,DerefMut};
+
 use druid::Widget;
 
 use super::{value::JSValue, qwidget::QWidget};
 
 
 pub trait ParentableWidget : Widget<JSValue> {
+    fn is_parentable(&self) -> bool;
     fn get_childs(&self) -> Option<&[QWidget]>;
 }
 
-pub struct QWWidget {
+pub struct WrapperQWidget {
     origin : Box<dyn ParentableWidget>
 }
 
-impl Widget<JSValue> for QWWidget {
+impl WrapperQWidget {
+    pub fn get_childs(&self) -> Option<&[QWidget]> {
+        self.origin.get_childs()
+    }
+}
+
+impl Widget<JSValue> for WrapperQWidget {
     fn event(&mut self, ctx: &mut druid::EventCtx, event: &druid::Event, data: &mut JSValue, env: &druid::Env) {
         self.origin.event(ctx, event, data, env)
     }

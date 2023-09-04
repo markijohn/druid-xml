@@ -4,7 +4,7 @@ use druid::{Widget, EventCtx, Event, Env, LifeCycleCtx, LifeCycle, UpdateCtx, La
 use serde_json::Value;
 use simplecss::{Selector, Element};
 
-use super::{drawable::Drawable, value::JSValue};
+use super::{drawable::Drawable, value::JSValue, wrapper::WrapperQWidget};
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 struct CacheItem(Rc<String>);
@@ -64,13 +64,13 @@ pub trait Queryable {
 pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
 
 impl QWidget {
-    pub fn get_pod(&self) -> &WidgetPod<JSValue, Box<dyn Widget<JSValue>>> {
+    pub fn get_pod(&self) -> &WidgetPod<JSValue, WrapperQWidget> {
         unsafe {
             &(*self.0.get()).origin
         }
     }
 
-    pub fn get_mut_pod(&self) -> &mut WidgetPod<JSValue, Box<dyn Widget<JSValue>>> {
+    pub fn get_mut_pod(&self) -> &mut WidgetPod<JSValue, WrapperQWidget> {
         unsafe {
             &mut (*self.0.get()).origin
         }
@@ -81,6 +81,12 @@ impl QWidget {
             (*self.0.get()).origin.widget_mut()
         }
     }
+
+    pub fn get_childs(&self) -> Option<&[QWidget]> {
+        unsafe {
+            (*self.0.get()).get_childs()
+        }
+    }
 }
 
 
@@ -89,8 +95,14 @@ struct QWidgetRaw {
     localname : Rc<String>,
     classes : Vec<Rc<String>>,
     parent : Option< QWidget>,
-    origin : WidgetPod<JSValue, WrapQWidget>,
+    origin : WidgetPod<JSValue, WrapperQWidget>,
     attribute : HashMap<Cow<'static,str>, JSValue>,
+}
+
+impl QWidgetRaw {
+    pub fn get_childs(&self) -> Option<&[QWidget]> {
+        self.origin.widget().get_childs()
+    }
 }
 
 impl Element for QWidget {
@@ -99,10 +111,13 @@ impl Element for QWidget {
     }
 
     fn prev_sibling_element(&self) -> Option<Self> {
-        unsafe { 
-            if let Some(parent) = (*self.0.get()).parent.as_ref() {
-                if let Some(find) = (*parent.0.get()).get_childs().iter().skip(1).enumerate().find( |(_i,e)| Rc::ptr_eq(&e.0, &self.0)) { //e.0.get() == self.0.get() ) {
-                    return Some( (*parent.0.get()).childs[find.0].clone() )
+        unsafe {
+            if let Some(childs) = (*self.0.get()).parent.and_then( |v| v.get_childs() ) {
+                let prev_sib = childs.iter().skip(1).enumerate().find( |(i,e)| {
+                    Rc::ptr_eq(&e.0, &self.0)
+                });
+                if let Some( (idx, _) ) = prev_sib {
+                    return Some( childs[idx-1].clone() )
                 }
             }
             None
