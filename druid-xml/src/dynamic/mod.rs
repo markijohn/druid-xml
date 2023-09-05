@@ -9,7 +9,7 @@ use simplecss::{StyleSheet, Declaration, DeclarationTokenizer};
 
 use crate::qwidget::value::JSValue;
 use crate::simple_style::{AnimationState, Pseudo, BorderStyle};
-use crate::widget::DXTextBox;
+use crate::widget::{DXTextBox, DXCheckbox, DXSlider, DXStepper};
 use crate::writer::{ElementQueryWrap, PseudoOrderTrapQueryWrap};
 use crate::{Element, Error, AttributeGetter, DummyLens, AttributesWrapper};
 
@@ -507,7 +507,7 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
         } else {
             &text
         };
-        Checkbox::new(label_text ).lens( DummyLens::<(),_>::new( false) ).boxed()
+        DXCheckbox::new( label_text ).boxed()
     }
 
     //TODO : password type?
@@ -564,8 +564,8 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
     else if tag == "slider" {
         let min = attrs.get_as_result::<f64>("min").unwrap_or(0f64);
         let max = attrs.get_as_result::<f64>("max").unwrap_or(1f64);
-        let slider = Slider::new();
-        slider.with_range(min,max).lens( DummyLens::<(),f64>::new(0f64) ).boxed()
+        let slider = DXSlider::new();
+        slider.with_range(min,max).boxed()
     }
 
     else if tag == "spinner" {
@@ -621,16 +621,16 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
         let max = attrs.get_as_result::<f64>("max").unwrap_or(std::f64::MAX);
         let step = attrs.get_as_result::<f64>("step").unwrap_or(std::f64::MAX);
         let wrap = attrs.get_as_result::<bool>("wraparound").unwrap_or(false);
-        let mut stepper = Stepper::new();
+        let mut stepper = DXStepper::new();
         stepper = stepper.with_range(min,max);
         stepper = stepper.with_step(step);
         stepper = stepper.with_wraparound(wrap);
-        stepper.lens(DummyLens::<(),f64>::new(0f64)).boxed()
+        stepper.boxed()
     }
 
     else if tag == "switch" {
         //TODO : style
-        Switch::new().lens(DummyLens::<(),bool>::new(false)).boxed()
+        DXSwitch::new().boxed()
     }
 
     //TODO
@@ -648,18 +648,6 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
     //     let child = build_widget(parameter, parsed_map, &new_stack, &elem.childs[0], css)?;
     //     Container::new( child ).boxed()
     // }
-
-    else if tag == "demo_custom_widget" {
-        ex_custom_widget::CustomWidget{}.boxed()
-    } else if let Some(elem) = parsed_map.get( tag.as_ref() ) {
-        let new_stack = new_parent_stack!();
-        build_widget(Some(&attrs), parsed_map, &new_stack, elem, css)?
-    } else {
-        return Err(Error::UnknownTag( (elem.src_pos, tag.as_ref().to_owned() )));
-    };
-
-    
-
 
     //all component
     //background, padding, 

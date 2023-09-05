@@ -1,6 +1,6 @@
 use std::ops::{DerefMut, Deref};
 
-use druid::{Widget, widget::TextBox};
+use druid::{Widget, widget::TextBox, KeyOrValue, Color, TextAlignment};
 use serde_json::Value;
 
 use crate::qwidget::value::JSValue;
@@ -18,6 +18,25 @@ impl DXTextBox {
 
 	pub fn new() -> DXTextBox {
 		DXTextBox { origin: TextBox::new() }
+	}
+
+	pub fn with_text_color(mut self, col:impl Into<KeyOrValue<Color>>) -> Self {
+		self.origin = self.origin.with_text_color(col);
+		self
+	}
+
+	pub fn with_text_size(mut self, size:impl Into<KeyOrValue<f64>>) -> Self {
+		self.origin = self.origin.with_text_size(size);
+		self
+	}
+
+	pub fn with_text_alignment(mut self, alignment:TextAlignment) -> Self {
+		self.origin = self.origin.with_text_alignment(alignment);
+		self
+	}
+
+	pub fn set_placeholder(&mut self, text:String) {
+		self.origin.set_placeholder(text)
 	}
 }
 
