@@ -2,6 +2,7 @@
 extern crate druid_xml_macro;
 
 use druid::{AppLauncher, WindowDesc};
+use druid_xml::qwidget::value::JSValue;
 
 pub fn main() {
     druid_xml!(
@@ -89,6 +90,6 @@ console_sep:hover { background-color:darkgray }
         .resizable(true)
         .title("DevTools sample");
     AppLauncher::with_window(window)
-        .launch( () )
+        .launch( JSValue::default() )
         .expect("launch failed");
 }

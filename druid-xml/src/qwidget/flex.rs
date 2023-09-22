@@ -703,7 +703,7 @@ impl Widget<JSValue> for Flex {
                     // The BoxConstrains of fixed-children only depends on the BoxConstrains of the
                     // Flex widget.
                     //let child_size = if bc_changed || widget.layout_requested() {
-                    let pod = widget.get_pod();
+                    let pod = widget.get_mut_pod();
                     let child_size = if bc_changed || pod.layout_requested() {
                         let alignment = alignment.unwrap_or(self.cross_alignment);
                         any_use_baseline |= alignment == CrossAxisAlignment::Baseline;
@@ -712,7 +712,7 @@ impl Widget<JSValue> for Flex {
                         let child_bc =
                             self.direction
                                 .constraints(&loosened_bc, 0.0, std::f64::INFINITY);
-                        let child_size = widget.layout(ctx, &child_bc, data, env);
+                        let child_size = pod.layout(ctx, &child_bc, data, env);
 
                         if child_size.width.is_infinite() {
                             //tracing::warn!("A non-Flex child has an infinite width.");
@@ -767,7 +767,7 @@ impl Widget<JSValue> for Flex {
                 } => {
                     // The BoxConstrains of flex-children depends on the size of every sibling, which
                     // received layout earlier. Therefore we use any_changed.
-                    let pod = widget.get_pod();
+                    let pod = widget.get_mut_pod();
                     //let child_size = if any_changed || widget.layout_requested() {
                     let child_size = if any_changed || pod.layout_requested() {
                         let alignment = alignment.unwrap_or(self.cross_alignment);
@@ -779,7 +779,7 @@ impl Widget<JSValue> for Flex {
 
                         let old_size = pod.layout_rect().size();
                         let child_bc = self.direction.constraints(&loosened_bc, 0.0, actual_major);
-                        let child_size = widget.layout(ctx, &child_bc, data, env);
+                        let child_size = pod.layout(ctx, &child_bc, data, env);
 
                         if old_size != child_size {
                             any_changed = true;
@@ -837,7 +837,7 @@ impl Widget<JSValue> for Flex {
                 | Child::Flex {
                     widget, alignment, ..
                 } => {
-                    let pod = widget.get_pod();
+                    let pod = widget.get_mut_pod();
                     //let child_size = widget.layout_rect().size();
                     let child_size = pod.layout_rect().size();
                     let alignment = alignment.unwrap_or(self.cross_alignment);
@@ -861,7 +861,7 @@ impl Widget<JSValue> for Flex {
                                 //TODO: this is the second call of layout on the same child, which
                                 // is bad, because it can lead to exponential increase in layout calls
                                 // when used multiple times in the widget hierarchy.
-                                widget.layout(ctx, &child_bc, data, env);
+                                pod.layout(ctx, &child_bc, data, env);
                             }
                             0.0
                         }

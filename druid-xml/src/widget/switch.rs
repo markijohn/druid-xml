@@ -9,13 +9,13 @@ use crate::qwidget::value::JSValue;
 use super::theme;
 
 pub struct DXSwitch {
-    origin : Checkbox
+    origin : Switch
 }
 
 impl DXSwitch {
-    pub fn new(text: &str) -> Self {
+    pub fn new() -> Self {
         Self {
-            origin : Switch::new( LabelText::from(text) )
+            origin : Switch::new( )
         }
     }
 }

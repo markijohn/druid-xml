@@ -4,6 +4,12 @@ use serde_json::Value;
 #[derive(Clone)]
 pub struct JSValue(Value);
 
+impl Default for JSValue {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
 
 impl druid::Data for JSValue {
     fn same(&self, other: &Self) -> bool {

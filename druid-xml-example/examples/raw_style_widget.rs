@@ -7,8 +7,7 @@ use druid::{AppLauncher, WindowDesc, widget::{Button} };
 use druid::{WidgetExt, Color, Insets};
 
 use druid_xml::simple_style::{BorderStyle, Styler, AnimationState, Animation, Direction, TimingFunction, PseudoStyle};
-use druid_xml::widget::button::DXButton;
-use druid_xml::widget::label::DXLabel;
+use druid_xml::widget::{DXButton, DXLabel};
 use druid_xml::widget::style_widget::{SimpleStyleWidget};
 
 use druid_xml::widget::theme;

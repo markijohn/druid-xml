@@ -1,7 +1,8 @@
 
 use druid::{AppLauncher,WindowDesc,Widget};
+use druid_xml::qwidget::value::JSValue;
 
-fn build_main() -> Box<dyn Widget<()>> {
+fn build_main() -> Box<dyn Widget<JSValue>> {
     // druid_xml::dynamic::generate_widget(
     //     r#"
     //     <!-- The top-level element must have a `fn` `lens` attribute. -->
@@ -60,6 +61,6 @@ fn main() {
         .resizable(true)
         .title("Dynamic demo");
     AppLauncher::with_window(window)
-        .launch( () )
+        .launch( JSValue::default() )
         .expect("launch failed");
 }

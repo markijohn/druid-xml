@@ -9,12 +9,11 @@ use simplecss::{StyleSheet, Declaration, DeclarationTokenizer};
 
 use crate::qwidget::value::JSValue;
 use crate::simple_style::{AnimationState, Pseudo, BorderStyle};
-use crate::widget::{DXTextBox, DXCheckbox, DXSlider, DXStepper};
+use crate::widget::{DXTextBox, DXCheckbox, DXSlider, DXStepper, DXSwitch};
 use crate::writer::{ElementQueryWrap, PseudoOrderTrapQueryWrap};
 use crate::{Element, Error, AttributeGetter, DummyLens, AttributesWrapper};
 
 mod color;
-pub(crate) mod ex_custom_widget;
 
 struct LazyWrapperWidget<W:Widget<D>,D> {
     child : Option<W>,
@@ -638,6 +637,10 @@ fn build_widget(parameter:Option<&AttributesWrapper<'_>>,parsed_map:&HashMap<Str
         tag_wrap = "painter";
         todo!()
     }
+
+    else {
+        panic!("Unknown tag : {tag}")
+    };
 
     //WARN : container is none-standard
     // else if tag == "container" {

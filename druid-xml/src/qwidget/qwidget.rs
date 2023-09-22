@@ -112,7 +112,7 @@ impl Element for QWidget {
 
     fn prev_sibling_element(&self) -> Option<Self> {
         unsafe {
-            if let Some(childs) = (*self.0.get()).parent.and_then( |v| v.get_childs() ) {
+            if let Some(childs) = (*self.0.get()).parent.as_ref().and_then( |v| v.get_childs() ) {
                 let prev_sib = childs.iter().skip(1).enumerate().find( |(i,e)| {
                     Rc::ptr_eq(&e.0, &self.0)
                 });
