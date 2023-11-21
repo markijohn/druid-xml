@@ -21,6 +21,7 @@ pub struct QWidgetContext<'a> {
     drawables : HashMap<Selector<'a>,Drawable>
 }
 
+
 impl <'a> QWidgetContext<'a> {
     pub fn new() -> Self {
         Self {
@@ -51,6 +52,20 @@ impl <'a> QWidgetContext<'a> {
     }
 }
 
+///! Element queriable widget
+struct QElement {
+    localname : Rc<String>,
+    classes : Vec<Rc<String>>,
+    parent : Option< QWidget>,
+    origin : WidgetPod<JSValue, WrapperQWidget>,
+    attribute : HashMap<Cow<'static,str>, JSValue>,
+}
+
+impl QElement {
+    pub fn get_childs(&self) -> Option<&[QWidget]> {
+        self.origin.widget().get_childs()
+    }
+}
 
 pub trait Queryable {
     fn find(&self, q:&str) -> QueryChain;
@@ -58,10 +73,8 @@ pub trait Queryable {
     fn root(&self) -> QueryChain;
 }
 
-
-
 #[derive(Clone)]
-pub struct QWidget(Rc<UnsafeCell<QWidgetRaw>>);
+pub struct QWidget(Rc<UnsafeCell<QElement>>);
 
 impl QWidget {
     pub fn get_pod(&self) -> &WidgetPod<JSValue, WrapperQWidget> {
@@ -90,20 +103,6 @@ impl QWidget {
 }
 
 
-///! Queriable widget
-struct QWidgetRaw {
-    localname : Rc<String>,
-    classes : Vec<Rc<String>>,
-    parent : Option< QWidget>,
-    origin : WidgetPod<JSValue, WrapperQWidget>,
-    attribute : HashMap<Cow<'static,str>, JSValue>,
-}
-
-impl QWidgetRaw {
-    pub fn get_childs(&self) -> Option<&[QWidget]> {
-        self.origin.widget().get_childs()
-    }
-}
 
 impl Element for QWidget {
     fn parent_element(&self) -> Option<Self> {
