@@ -1,6 +1,7 @@
 
 use druid::{AppLauncher,WindowDesc,Widget};
 use druid_xml::qwidget::value::JSValue;
+use druid_xml_macro::druid_xml;
 
 fn build_main() -> Box<dyn Widget<JSValue>> {
     // druid_xml::dynamic::generate_widget(
@@ -25,13 +26,13 @@ fn build_main() -> Box<dyn Widget<JSValue>> {
         label { background-color:rgb(0,0,255); font-size:24px; border:3px solid white; border-radius:5px; padding:10px; margin:0 20 0 0 }
         .anim_margin { transition:2s margin linear }
         .anim_margin:hover { margin:100 20 0 0 }
-        
+
         .anim_padding { transition:2s padding ease }
         .anim_padding:hover { padding:100 10 10 10 }
-        
+
         .anim_font_size { transition:2s font-size ease-in }
         .anim_font_size:hover { font-size:52px }
-        
+
         .anim_backcol { transition:2s background-color ease-in-out }
         .anim_backcol:hover { background-color:rgb(255,200,200) }
 
@@ -44,6 +45,7 @@ fn build_main() -> Box<dyn Widget<JSValue>> {
         </style>
 
         <flex direction="column" fn="build_main" lens="()">
+            <button>OK</button>
             <label class="anim_margin">Margin animation (Linear)</label>
             <label class="anim_padding">Padding (Ease)</label>
             <label class="anim_font_size">Font-size (EaseIn)</label>
